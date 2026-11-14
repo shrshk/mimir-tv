@@ -107,7 +107,7 @@ are files readable by you only.
   the top bar picks which TV 📺 plays on (kept on each phone); the assistant names one with `tv`. Play here plays it in the page's own player
   (picture in picture, AirPlay, the lock screen): through Jellyfin, it starts where any Jellyfin app left off, saves
   its place and played marks there (so Continue watching is the same on the TV), and goes on to the next episode after
-  a short countdown. Kodi is the other option. For a provider's title, ＋ Jellyfin first adds it as `.strm` files (a
+  a short countdown. In a title's card, ▶ Jellyfin and 📺 TV sit side by side, with Play here, My list and the rest as quiet links below. For a provider's title, ＋ Jellyfin first adds it as `.strm` files (a
   show, a movie or a live channel); items Jellyfin has show ✓ (asked from Jellyfin's API, so something removed there
   shows as not added). New episodes of added shows reach Jellyfin within the hour.
 - **Your streaming apps**: search also finds titles on the apps you have (from TMDB, which takes JustWatch's

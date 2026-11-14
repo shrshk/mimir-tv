@@ -152,7 +152,9 @@
   button.alt, a.alt { border:0; background:none; color:var(--mute); padding:8px 6px; font-size:13px; font-weight:500; text-decoration:none; }
   button.x { border:0; background:none; color:var(--mute); padding:2px 6px; font-weight:400; }
   .big button, .big a.btn { padding:11px 18px; font-size:15px; }
-  .sheet .acts button.p, .sheet .acts a.btn, .sheet .acts > button:not(.alt) { flex:1 1 100%; justify-content:center; padding:12px; font-size:16px; }
+  /* A sheet's actions: the ways to play side by side on one line (▶ Jellyfin, 📺 TV), the quiet links on the next. */
+  .sheet .acts button.p, .sheet .acts a.btn, .sheet .acts > button:not(.alt) { flex:1 1 calc(50% - 4px); justify-content:center; padding:12px; font-size:16px; }
+  .sheet .acts .alt { order:1; }
 
   /* Show page and episodes */
   .showbar { grid-column:1/-1; display:flex; flex-direction:column; gap:10px; margin:0 0 6px; }
@@ -557,7 +559,7 @@ function tile(i, sub) {
     + `<div class="t">${esc(i.title)}</div>${line ? `<div class="s">${esc(line)}</div>` : ""}</div>`;
 }
 
-// How a video plays: Jellyfin first (its web app here, its TV app on the TV); playing here and Kodi are the others.
+// How a video plays: Jellyfin first (its web app here, its TV app on the TV); playing here is the other.
 // On the iPhone, ▶ Jellyfin opens the item in the house's Jellyfin app (installed and signed in to this server):
 // Streamyfin plays it from its own link (streamyfin://topshelf/play; topshelf/item opens a show's page), Swiftfin's
 // links only open the item, so the Air then tells Swiftfin to play it. "web" opens Safari. Elsewhere it opens Jellyfin
@@ -573,7 +575,7 @@ const appLink = (id, play) => !appIds ? jfLink(id)
 // play: a video; Swiftfin's links only open its page, so the Air also tells the app to play it (Jellyfin's remote
 // control, as for the TV app), once the app has come up. keepalive: the request survives the switch to Swiftfin.
 const jfOpen = (id, label, play) => appIds
-  ? `<a class="btn" href="${appLink(id, play)}"${play && !streamy() ? ` onclick="playInApp('${id}')"` : ""}>${label}</a><a class="alt" href="${jfLink(id)}" target="_blank">web</a>`
+  ? `<a class="btn" href="${appLink(id, play)}"${play && !streamy() ? ` onclick="playInApp('${id}')"` : ""}>${label}</a><a class="alt" href="${jfLink(id)}" target="_blank">web ↗</a>`
   : `<a class="btn" href="${jfLink(id)}" target="_blank">${label}</a>`;
 function playInApp(id) {
   fetch("/api/jf/phone", {method: "POST", keepalive: true, headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})}).catch(() => {});
@@ -587,15 +589,13 @@ function playActions(v, k, ctx) {
   const c = ctx === "sheet" ? 1 : 0;
   // + My list: titles in the home library only (a Jellyfin favourite), in a sheet and on a provider's rows.
   const mine = v.id || v.jf_id ? (ctx === "sheet" || !v.id ? listBtn({jf: v.id || v.jf_id, title: v.title}) : "") : "";
-  if (TV) return `<button class="p" onclick="go('tv',${k},${c})">▶ Play</button>`
-    + (kodiReady ? `<button class="alt" onclick="go('kodi',${k},${c})">Kodi</button>` : "") + mine;
+  if (TV) return `<button class="p" onclick="go('tv',${k},${c})">▶ Play</button>` + mine;
   // Your videos and a provider's items Jellyfin has (jf_id, from Jellyfin itself): ▶ opens them in Jellyfin (Swiftfin
   // on the iPhone); others: ＋ adds them. Play here plays in this page, through Jellyfin when it has the item.
   const id = v.id || v.jf_id;
   const open = id ? jfOpen(id, "▶ Jellyfin", true) : `<button class="p" onclick="go('jf',${k},${c})">＋ Jellyfin</button>`;
   return `${open}<button onclick="go('tv',${k},${c})">📺 TV</button>`
-    + (id || v.here ? `<button class="alt" onclick="go('here',${k},${c})">Play here</button>` : "")
-    + (kodiReady ? `<button class="alt" onclick="go('kodi',${k},${c})">Kodi</button>` : "") + mine;
+    + (id || v.here ? `<button class="alt" onclick="go('here',${k},${c})">Play here</button>` : "") + mine;
 }
 
 // The streaming apps (Netflix, Peacock …): where a title streams comes from TMDB on the Air. On the TV a button opens
@@ -706,10 +706,6 @@ async function go(how, k, fromSheet) {
   if (how === "here") return playHere(ctx, v);
   const title = ctx.videos.length === 1 ? ctx.title : v.title;
   try {
-    if (how === "kodi") {
-      await api(ctx.jf ? "/api/jf/kodi" : P(v.p) + "/kodi", {method:"POST", body: ctx.jf ? {id:v.id} : {url:v.url, title}});
-      return toast("Playing with Kodi on the TV");
-    }
     // Jellyfin has it already: play it by its id (adding it again would rewrite its file mid-play).
     const known = ctx.jf ? v.id : how === "tv" && v.jf_id;
     if (known) { await api("/api/jf/tv", {method:"POST", body:{id:known, tv: tvChoice}}); return toast(`Playing in Jellyfin on ${tvLabel()}`); }
@@ -967,7 +963,6 @@ $("#q").addEventListener("input", () => {
 });
 
 // What a provider is busy with (e.g. rebuilding its index), under the search box.
-let kodiReady = false;
 async function provStatus() {
   const notes = await Promise.all(provs().map(p => api(P(p.id) + "/status").then(s => s.note).catch(() => "")));
   $("#idx").textContent = notes.filter(Boolean).join(" · ");
@@ -1169,13 +1164,13 @@ function tvMenu(names) {
   s.onchange = () => { tvChoice = s.value; try { localStorage.setItem("tv", tvChoice); } catch (e) { /* not kept */ } };
 }
 
-// Connectors: the providers set up here (each with its own section, search and My list entries), Kodi and the TVs.
+// Connectors: the providers set up here (each with its own section, search and My list entries) and the TVs.
 let connectors = {providers: []};
 const provs = () => connectors.providers || [];
 const P = id => "/api/p/" + enc(id);  // a provider's routes
 const pidOf = node => (node || "").split("~")[0];  // a provider's folder is named <provider id>~<its address>
 api("/api/connectors").catch(() => connectors).then(c => {
-  connectors = c; kodiReady = !!c.kodi; tvMenu(c.tvs || []);
+  connectors = c; tvMenu(c.tvs || []);
   document.documentElement.classList.toggle("noprov", !provs().length);
   if (provs().length) { provStatus(); setInterval(provStatus, 3000); }
   open("", "", false);
