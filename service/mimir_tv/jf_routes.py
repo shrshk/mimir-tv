@@ -17,7 +17,7 @@ from starlette.background import BackgroundTask
 
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
 from mimir_tv.kodi import Kodi, KodiError
-from mimir_tv.tv import TvError
+from mimir_tv.tv import Tvs, TvError, aimed, tv_address
 from mimir_tv.mylist import ListDates
 
 FOLDERS = {"CollectionFolder", "Folder", "Series", "Season", "BoxSet", "UserView", "PhotoAlbum"}
@@ -37,6 +37,15 @@ PASS_HEADERS = ("content-type", "content-length", "content-range", "accept-range
 
 class Play(BaseModel):
     id: str = Field(pattern=ID)
+    tv: str = Field("", max_length=100)  # which TV (its name in Settings); the first one when empty
+
+
+def which_tv(tvs: Tvs | None, name: str) -> str:
+    """The address of the TV a request names ("" for the default TV); 404 when Settings has no such TV."""
+    try:
+        return tv_address(tvs, name)
+    except LookupError as e:
+        raise HTTPException(404, str(e)) from e
 
 
 class Watching(BaseModel):
@@ -115,8 +124,10 @@ def router(
     hidden: Callable[[], set[str]] = set,
     play_app=None,
     phone_app: Callable[[], str] = lambda: "swiftfin",
+    tvs: Tvs | None = None,
 ) -> APIRouter:
-    """hidden: the providers' own libraries, shown in each provider's section instead of Your library."""
+    """hidden: the providers' own libraries, shown in each provider's section instead of Your library. tvs: the TVs
+    in Settings, so a play can name one (open_app and play_app then take its address as tv=)."""
     api = APIRouter()
 
     def guard(fn, *args):
@@ -179,9 +190,11 @@ def router(
         return {"resume": rows(jf.resume), "next_up": rows(jf.next_up), "new": rows(jf.recent_episodes, 7)}
 
     @api.get("/api/jf/now")
-    def now_playing():
-        """What the Jellyfin TV app is playing ({} when nothing, or the app is closed)."""
-        session = guard(jf.tv_playing)
+    def now_playing(tv: str = Query("", max_length=100)):
+        """What the Jellyfin TV app is playing on a TV (the first one when none is named): {} when nothing, or the app
+        is closed."""
+        host = which_tv(tvs, tv) or (tvs.host() if tvs else "")
+        session = guard(jf.tv_playing, host)
         item = (session or {}).get("NowPlayingItem")
         if not item:
             return {}
@@ -292,7 +305,8 @@ def router(
         item = guard(jf.item, p.id)
         if item.get("Type") not in PLAYABLE:
             raise HTTPException(400, "not a video")
-        guard(lambda: jf.play_on_tv(p.id, open_app, play_app=play_app))
+        host = which_tv(tvs, p.tv)
+        guard(lambda: jf.play_on_tv(p.id, aimed(open_app, host), play_app=aimed(play_app, host), host=host))
         return {"playing": item.get("Name")}
 
     @api.post("/api/jf/phone")

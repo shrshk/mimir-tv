@@ -8,6 +8,8 @@ TV, so it never leaves the Air. The TV trusts it once, through its "Allow USB de
 import os
 import re
 import shlex
+from functools import partial
+from collections.abc import Callable
 from pathlib import Path
 
 from adb_shell.adb_device import AdbDeviceTcp
@@ -25,6 +27,48 @@ NETFLIX = "com.netflix.ninja"
 
 class TvError(Exception):
     pass
+
+
+class Tvs:
+    """The TVs in Settings, read fresh each time, found by name or address; the first is the default."""
+
+    def __init__(self, entries: Callable[[], list[dict]], key: Path):
+        self.entries, self.key = entries, key
+
+    def names(self) -> list[str]:
+        return [t["name"] for t in self.entries()]
+
+    def host(self, name: str = "") -> str:
+        """The address of the TV called `name` (or at that address), of the first TV when no name is given, or ""
+        when there is none. LookupError for a name that is not in Settings."""
+        tvs = self.entries()
+        if not name:
+            return tvs[0]["host"] if tvs else ""
+        found = next((t for t in tvs if name.strip().casefold() in (t["name"].casefold(), t["host"])), None)
+        if found is None:
+            raise LookupError(f"No TV called {name!r} in Settings")
+        return found["host"]
+
+    def get(self, host: str = "") -> "Tv":
+        """The TV at that address, or the first one."""
+        host = host or self.host()
+        if not host:
+            raise TvError("No TV set up (add one on the Settings page)")
+        return Tv(host, self.key)
+
+
+def aimed(fn, host: str):
+    """A TV callback (open_app, play_app) aimed at the TV at that address; unchanged without one (the default TV)."""
+    return partial(fn, tv=host) if fn is not None and host else fn
+
+
+def tv_address(tvs: Tvs | None, name: str) -> str:
+    """The address of the TV a request names ("" for none: the default TV). LookupError when it is not in Settings."""
+    if not name:
+        return ""
+    if tvs is None:
+        raise LookupError(f"No TV called {name!r} in Settings")
+    return tvs.host(name)
 
 
 class Tv:

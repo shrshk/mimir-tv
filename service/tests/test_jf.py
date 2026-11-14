@@ -10,6 +10,7 @@ from mimir_tv.jf_routes import router
 from mimir_tv.kodi import Kodi
 from mimir_tv.mylist import ListDates
 from mimir_tv.resolver import start_resolver
+from mimir_tv.tv import Tvs
 
 MOVIE = "a" * 32
 WEDDING = "b" * 32
@@ -352,6 +353,30 @@ def test_tv_plays_in_wholphin_by_its_intent_from_where_it_was_left(tmp_path, mon
     installed[0] = False  # no Wholphin: Jellyfin's own app gets the remote command
     assert c.post("/api/jf/tv", json={"id": MOVIE}).status_code == 200
     assert [p[0] for p in PLAYED] == ["tv"]
+
+
+def test_a_play_goes_to_the_tv_it_names_and_each_tv_says_what_it_plays(tmp_path, monkeypatch):
+    # Two TVs with Wholphin: the phone's TV menu names one; without a name the first TV plays, as with one TV.
+    living = TV_APP | {"Id": "living", "Client": "Wholphin", "RemoteEndPoint": "192.0.2.20"}
+    bedroom = TV_APP | {"Id": "bedroom", "Client": "Wholphin", "RemoteEndPoint": "192.0.2.21", "UserId": "u1"}
+    bedroom["NowPlayingItem"] = {"Id": CLIP, "Name": "Clip", "Type": "Video", "RunTimeTicks": 6_000_000_000}
+    monkeypatch.setattr("tests.test_jf.SESSIONS", [living, bedroom])
+    monkeypatch.setattr("tests.test_jf.PLAYED", [])
+    started = []
+    tvs = Tvs(
+        lambda: [{"name": "Living room", "host": "192.0.2.20"}, {"name": "Bedroom", "host": "192.0.2.21"}],
+        tmp_path / "k",
+    )
+    jf = Jellyfin("http://jf", "secret-key", transport=httpx.MockTransport(fake))
+    play = lambda item_id, ms, tv="": started.append((item_id, tv)) or True  # noqa: E731
+    c = TestClient(create_app(jf, tmp_path / "picks", router(jf, None, "https://lan.example", play_app=play, tvs=tvs)))
+    assert c.post("/api/jf/tv", json={"id": MOVIE, "tv": "bedroom"}).status_code == 200
+    assert c.post("/api/jf/tv", json={"id": MOVIE}).status_code == 200
+    assert started == [(MOVIE, "192.0.2.21"), (MOVIE, "")]  # by name (any case), then the first TV
+    r = c.post("/api/jf/tv", json={"id": MOVIE, "tv": "Kitchen"})
+    assert r.status_code == 404 and "Kitchen" in r.json()["detail"] and len(started) == 2
+    assert c.get("/api/jf/now", params={"tv": "Bedroom"}).json()["title"] == "Clip"
+    assert c.get("/api/jf/now").json() == {}  # the living room plays nothing, though the bedroom does
 
 
 def test_tv_asks_for_the_jellyfin_app_when_it_is_closed(tmp_path, monkeypatch):

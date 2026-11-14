@@ -6,6 +6,12 @@ import time
 import httpx
 
 
+def on_tv(session: dict, host: str) -> bool:
+    """A session from the TV at that address (any TV when no host is given): Jellyfin names where each one connects
+    from."""
+    return not host or (session.get("RemoteEndPoint") or "").split(":")[0] == host.split(":")[0]
+
+
 class JellyfinError(Exception):
     pass
 
@@ -337,8 +343,9 @@ class Jellyfin:
         info = self._call("GET", "/System/Info/Public") or {}
         return {"server": info.get("Id", ""), "user": self.user()}
 
-    def tv_session(self) -> dict | None:
-        """The Jellyfin TV app (Wholphin or Jellyfin's own), when it is open and can take a play command."""
+    def tv_session(self, host: str = "") -> dict | None:
+        """The Jellyfin TV app (Wholphin or Jellyfin's own), when it is open and can take a play command; with a host,
+        only the one on the TV at that address."""
         params = {"ControllableByUserId": self.user(), "ActiveWithinSeconds": "960"}
         tvs = [
             x
@@ -346,12 +353,14 @@ class Jellyfin:
             if ("TV" in (x.get("Client") or "") or x.get("Client") == "Wholphin")
             and x.get("SupportsRemoteControl")
             and "Video" in (x.get("PlayableMediaTypes") or [])
+            and on_tv(x, host)
         ]
         return max(tvs, key=lambda x: x.get("LastActivityDate") or "", default=None)
 
-    def tv_playing(self) -> dict | None:
-        """The Jellyfin TV app's session while it plays something. Reading what plays needs no remote control: Wholphin
-        reports none while playing, so this asks for the user's sessions, not the ones it could command."""
+    def tv_playing(self, host: str = "") -> dict | None:
+        """The Jellyfin TV app's session while it plays something (with a host, on the TV at that address). Reading
+        what plays needs no remote control: Wholphin reports none while playing, so this asks for the user's sessions,
+        not the ones it could command."""
         me = self.user()
         tvs = [
             x
@@ -359,6 +368,7 @@ class Jellyfin:
             if x.get("UserId") == me
             and ("TV" in (x.get("Client") or "") or x.get("Client") == "Wholphin")
             and x.get("NowPlayingItem")
+            and on_tv(x, host)
         ]
         return max(tvs, key=lambda x: x.get("LastActivityDate") or "", default=None)
 
@@ -387,22 +397,30 @@ class Jellyfin:
         raise JellyfinError("Swiftfin did not open")
 
     def play_on_tv(
-        self, item_id: str, open_app=None, wait: float = 1, tries: int = 30, settle: float = 3, play_app=None
+        self,
+        item_id: str,
+        open_app=None,
+        wait: float = 1,
+        tries: int = 30,
+        settle: float = 3,
+        play_app=None,
+        host: str = "",
     ) -> None:
         """Starts it in the Jellyfin TV app. play_app (if given) plays it in Wholphin by intent and returns True, or
         False when Wholphin is not there. Otherwise open_app (if given) brings the app to the front unless it already is
         (it returns False then): an app left in the background still has a session but cannot come forward for a
         play command. After opening, this waits for the app to connect, then `settle` seconds more: the app connects
-        before its home screen has loaded, and a play command then shows "no playable items" first."""
+        before its home screen has loaded, and a play command then shows "no playable items" first. With a host, the
+        Jellyfin app on the TV at that address is the one told to play."""
         if play_app:  # Wholphin: started by its own intent, from where it was left
             ticks = (self.user_data(item_id) or {}).get("PlaybackPositionTicks") or 0
             if play_app(item_id, ticks // 10_000):
                 return
-        tv = self.tv_session()
+        tv = self.tv_session(host)
         if open_app and open_app() is not False:  # it was closed or behind another app: opened now
             for _ in range(tries):
                 time.sleep(wait)
-                if tv := self.tv_session():
+                if tv := self.tv_session(host):
                     time.sleep(settle)
                     break
         if not tv:
@@ -411,7 +429,7 @@ class Jellyfin:
             self._call("POST", f"/Sessions/{tv['Id']}/Playing/Stop")
             for _ in range(tries):
                 time.sleep(wait)
-                if not (tv := self.tv_session() or tv).get("NowPlayingItem"):
+                if not (tv := self.tv_session(host) or tv).get("NowPlayingItem"):
                     break
         params = {"playCommand": "PlayNow", "itemIds": item_id}
         self._call("POST", f"/Sessions/{tv['Id']}/Playing", params)

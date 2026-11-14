@@ -45,7 +45,7 @@ TOOLS = [
     },
     {
         "name": "play_on_tv",
-        "description": "Play on the living-room TV. Give exactly one of: jellyfin_id (from search's library), app "
+        "description": "Play on a TV (tv: its name from whats_on_tv's tvs; the first TV when left out). Give exactly one of: jellyfin_id (from search's library), app "
         "with title and tmdb (from search's apps: opens that app at the title), or provider and id with title (a "
         f"provider's video, from search or live_now). via picks the player for jellyfin_id and a provider's video: "
         f"jellyfin (default) or kodi. {ASK_FIRST}",
@@ -60,13 +60,18 @@ TOOLS = [
                 "page": {"type": "string", "description": "with an id from live_now: its list"},
                 "title": {"type": "string"},
                 "via": {"type": "string", "enum": ["jellyfin", "kodi"]},
+                "tv": {"type": "string", "description": "which TV, by its name, e.g. Bedroom"},
             },
         },
     },
     {
         "name": "whats_on_tv",
-        "description": "Whether the TV's screen is on, which app is in front, and, when it is Jellyfin, what it is playing (title, episode, paused, minute).",
-        "inputSchema": {"type": "object", "properties": {}},
+        "description": "Whether a TV's screen is on, which app is in front, and, when it is Jellyfin, what it is playing "
+        "(title, episode, paused, minute). tv: its name (the first TV when left out); tvs lists every TV's name.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"tv": {"type": "string", "description": "which TV, by its name, e.g. Bedroom"}},
+        },
     },
     {
         "name": "live_now",
@@ -294,7 +299,7 @@ def on_apps(found: list[dict]) -> list[dict]:
     ]
 
 
-def router(token: str, tv_now: Callable[[], dict] | None = None) -> APIRouter:
+def router(token: str, tv_now: Callable[..., dict] | None = None) -> APIRouter:
     api = APIRouter()
 
     async def call(app, method: str, path: str, **kw) -> Any:
@@ -387,31 +392,38 @@ def router(token: str, tv_now: Callable[[], dict] | None = None) -> APIRouter:
             raise ToolError("give exactly one of jellyfin_id, app or a provider's id")
         kodi = a.get("via") == "kodi"
         title = (a.get("title") or "")[:200]
+        tv = str(a.get("tv") or "")[:100]
         if a.get("jellyfin_id"):
-            return await call(app, "POST", "/api/jf/kodi" if kodi else "/api/jf/tv", json={"id": a["jellyfin_id"]})
+            body = {"id": a["jellyfin_id"]} | ({} if kodi else {"tv": tv})
+            return await call(app, "POST", "/api/jf/kodi" if kodi else "/api/jf/tv", json=body)
         if a.get("app"):
-            await call(
-                app, "POST", "/api/streaming/open", json={"app": a["app"], "title": title, "tmdb": a.get("tmdb", "")}
-            )
+            body = {"app": a["app"], "title": title, "tmdb": a.get("tmdb", ""), "tv": tv}
+            await call(app, "POST", "/api/streaming/open", json=body)
             return {"opened": a["app"], "title": title}
         pid = await which(app, a)
         video = {"url": a["id"], "title": title or "Video", "page": a.get("page") or ""}
         if kodi:
             return await call(app, "POST", f"/api/p/{pid}/kodi", json=video)
-        added = await call(app, "POST", f"/api/p/{pid}/jellyfin/video", json=video | {"tv": True})
+        added = await call(app, "POST", f"/api/p/{pid}/jellyfin/video", json=video | {"tv": True, "which_tv": tv})
         return {"playing": video["title"], "jellyfin_id": added["id"]}
 
-    async def whats_on_tv(app) -> dict:
+    async def whats_on_tv(app, tv: str = "") -> dict:
         if tv_now is None:
             raise ToolError("No TV set up (add one on the Settings page)")
         try:
-            now = await asyncio.to_thread(tv_now)
-        except TvError as e:
+            now = await asyncio.to_thread(tv_now, tv) if tv else await asyncio.to_thread(tv_now)
+        except (TvError, LookupError) as e:
             raise ToolError(str(e)) from e
+        try:
+            names = (await call(app, "GET", "/api/connectors")).get("tvs") or []
+        except ToolError:
+            names = []
         out = now | {"app_name": TV_APPS.get(now["app"], now["app"])}
+        if names:  # which TV this is, and the others it could be asked about
+            out |= {"tv": tv or names[0], "tvs": names}
         if now["app"] in ("org.jellyfin.androidtv", "com.github.damontecres.wholphin"):  # Jellyfin knows what plays
             try:
-                playing = await call(app, "GET", "/api/jf/now")
+                playing = await call(app, "GET", "/api/jf/now", params={"tv": tv})
             except ToolError:
                 playing = None
             out["playing"] = "unknown" if playing is None else (playing or "nothing (browsing)")
@@ -442,7 +454,7 @@ def router(token: str, tv_now: Callable[[], dict] | None = None) -> APIRouter:
         if name == "play_on_tv":
             return await play_on_tv(app, a)
         if name == "whats_on_tv":
-            return await whats_on_tv(app)
+            return await whats_on_tv(app, str(a.get("tv") or "")[:100])
         if name == "trending":
             return on_apps(await call(app, "GET", "/api/streaming/trending"))
         if name == "live_now":

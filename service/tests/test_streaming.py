@@ -270,11 +270,18 @@ def test_homes_app_rows_are_each_apps_popular_titles(tmp_path):
     assert len(tmdb.calls) == n  # kept a day
 
 
-def test_an_on_my_apps_title_opens_its_app_only_when_the_tv_plays_it(tmp_path):
+def test_an_on_my_apps_title_opens_its_app_only_on_the_tv_that_plays_it(tmp_path):
     opened = []
     app = FastAPI()
-    tv_only = lambda request: request.headers.get("x-forwarded-for") == "192.0.2.25"  # noqa: E731
-    app.include_router(router(Streaming("eyJtok", tmp_path / "m.db"), lambda *a: opened.append(a), tv_only))
+    tvs = {"192.0.2.25", "192.0.2.26"}  # two TVs: the app opens on the one that asked, not the first
+
+    def asking(request):
+        caller = request.headers.get("x-forwarded-for") or ""
+        return caller if caller in tvs else ""
+
+    app.include_router(
+        router(Streaming("eyJtok", tmp_path / "m.db"), lambda *a, tv="": opened.append((*a, tv)), asking)
+    )
     c = TestClient(app)
     r = c.get("/api/streaming/launch", params={"app": "peacock", "tmdb": "tv/2", "title": "The Office"})
     assert r.status_code == 200 and r.headers["content-type"] == "video/mp4" and len(r.content) > 1000
@@ -282,14 +289,14 @@ def test_an_on_my_apps_title_opens_its_app_only_when_the_tv_plays_it(tmp_path):
     tv = c.get(
         "/api/streaming/launch",
         params={"app": "peacock", "title": "The Office"},
-        headers={"x-forwarded-for": "192.0.2.25"},
+        headers={"x-forwarded-for": "192.0.2.26"},
     )
     assert tv.status_code == 200
     for _ in range(50):
         if opened:
             break
         time.sleep(0.02)
-    assert opened == [("com.peacocktv.peacockandroid", "The Office", "")]
+    assert opened == [("com.peacocktv.peacockandroid", "The Office", "", "192.0.2.26")]
     assert c.get("/api/streaming/launch", params={"app": "com.evil"}).status_code == 404
 
 

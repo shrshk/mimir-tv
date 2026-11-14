@@ -29,6 +29,8 @@
            padding-top:calc(env(safe-area-inset-top) + 10px); background:#000; }  /* solid: iOS draws text under a backdrop blur at low resolution until a scroll */
   #logo { font-weight:900; font-size:22px; letter-spacing:1px; color:var(--accent); text-decoration:none; text-transform:uppercase; line-height:1; }
   #logo span { color:var(--ink); }
+  /* The TV 📺 plays on, when the house has more than one (hidden otherwise) */
+  #tvpick { width:auto; max-width:40vw; padding:6px 8px; font-size:15px; }
   .topnav { display:none; gap:4px; }
   .topnav button { border:0; background:none; color:var(--mute); font-size:15px; padding:6px 8px; }
   .topnav button.on { color:var(--ink); font-weight:700; }
@@ -261,6 +263,7 @@ if (new URLSearchParams(location.search).has("tv")) document.documentElement.cla
   <a id="logo" href="/" aria-label="Home">Mimir<span>tv</span></a>
   <nav class="topnav"><button data-tab="home" class="on">Home</button><button data-tab="list">My list</button><button data-tab="library">Library</button></nav>
   <span class="grow"></span>
+  <select id="tvpick" aria-label="Which TV 📺 plays on" title="Which TV 📺 plays on" hidden></select>
   <button class="icon" id="theme" aria-label="Theme: Cinema or Doodle" title="Theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></button>
   <a id="tosend" href="send" aria-label="Send to TV">✏️ TV</a>
   <a class="icon" id="tosettings" href="settings" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
@@ -614,7 +617,7 @@ function appButtons(v) {
 }
 async function openApp(k) {
   const o = toOpen[k];
-  try { await api("/api/streaming/open", {method:"POST", body:{app: o.app, title: o.title, tmdb: o.tmdb}}); toast(`Opening ${o.name} on the TV`); }
+  try { await api("/api/streaming/open", {method:"POST", body:{app: o.app, title: o.title, tmdb: o.tmdb, tv: tvChoice}}); toast(`Opening ${o.name} on ${tvLabel()}`); }
   catch (e) { toast(e.message); }
 }
 // A search hit from the streaming apps that is also in Jellyfin or a provider shows once: there, with the apps added.
@@ -709,15 +712,15 @@ async function go(how, k, fromSheet) {
     }
     // Jellyfin has it already: play it by its id (adding it again would rewrite its file mid-play).
     const known = ctx.jf ? v.id : how === "tv" && v.jf_id;
-    if (known) { await api("/api/jf/tv", {method:"POST", body:{id:known}}); return toast("Playing in Jellyfin on the TV"); }
-    toast(how === "tv" ? "Starting in Jellyfin on the TV…" : "Adding to Jellyfin…");
-    const tv = how === "tv";
+    if (known) { await api("/api/jf/tv", {method:"POST", body:{id:known, tv: tvChoice}}); return toast(`Playing in Jellyfin on ${tvLabel()}`); }
+    toast(how === "tv" ? `Starting in Jellyfin on ${tvLabel()}…` : "Adding to Jellyfin…");
+    const tv = how === "tv", which_tv = tv ? tvChoice : "";
     const r = ctx.episodic
-      ? await api(P(v.p) + "/jellyfin", {method:"POST", body:{...showOf(ctx), episode:v.url, tv}})
-      : await api(P(v.p) + "/jellyfin/video", {method:"POST", body:{url:v.url, title, tv, page: fromSheet ? v.page || "" : ctx.node || ""}});
+      ? await api(P(v.p) + "/jellyfin", {method:"POST", body:{...showOf(ctx), episode:v.url, tv, which_tv}})
+      : await api(P(v.p) + "/jellyfin/video", {method:"POST", body:{url:v.url, title, tv, which_tv, page: fromSheet ? v.page || "" : ctx.node || ""}});
     // A window opened after this wait is blocked on the iPhone, so the link is tapped from the message.
     markAdded(ctx, v, r.id, !!fromSheet);
-    if (tv) toast("Playing in Jellyfin on the TV");
+    if (tv) toast(`Playing in Jellyfin on ${tvLabel()}`);
     else toast("Added to Jellyfin", r.id, true);
   } catch (e) { toast(e.message); }
 }
@@ -1152,13 +1155,27 @@ document.addEventListener("visibilitychange", async () => {
   try { if ((await api("/api/version")).page !== pageVersion) location.reload(); } catch (e) { /* offline: keep this one */ }
 });
 
-// Connectors: the providers set up here (each with its own section, search and My list entries), Kodi and the TV.
+// Which TV 📺 plays on, when the house has more than one: the menu in the top bar, kept on this phone. Empty: the
+// first TV in Settings (one TV, or the page on the TV itself).
+let tvChoice = "";
+try { tvChoice = localStorage.getItem("tv") || ""; } catch (e) { /* private window: the first TV */ }
+const tvLabel = () => tvChoice ? `the ${tvChoice} TV` : "the TV";
+function tvMenu(names) {
+  const s = $("#tvpick");
+  if (TV || names.length < 2) { tvChoice = ""; s.hidden = true; return; }
+  if (!names.includes(tvChoice)) tvChoice = names[0];  // a TV renamed or removed in Settings
+  s.innerHTML = names.map(n => `<option${n === tvChoice ? " selected" : ""}>${esc(n)}</option>`).join("");
+  s.hidden = false;
+  s.onchange = () => { tvChoice = s.value; try { localStorage.setItem("tv", tvChoice); } catch (e) { /* not kept */ } };
+}
+
+// Connectors: the providers set up here (each with its own section, search and My list entries), Kodi and the TVs.
 let connectors = {providers: []};
 const provs = () => connectors.providers || [];
 const P = id => "/api/p/" + enc(id);  // a provider's routes
 const pidOf = node => (node || "").split("~")[0];  // a provider's folder is named <provider id>~<its address>
 api("/api/connectors").catch(() => connectors).then(c => {
-  connectors = c; kodiReady = !!c.kodi;
+  connectors = c; kodiReady = !!c.kodi; tvMenu(c.tvs || []);
   document.documentElement.classList.toggle("noprov", !provs().length);
   if (provs().length) { provStatus(); setInterval(provStatus, 3000); }
   open("", "", false);

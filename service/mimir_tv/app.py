@@ -45,7 +45,7 @@ from mimir_tv.streaming import Streaming, StreamingError, pick
 from mimir_tv.streaming import router as streaming_router
 from mimir_tv.taste import Taste
 from mimir_tv.taste import router as taste_router
-from mimir_tv.tv import Tv, TvError
+from mimir_tv.tv import Tvs, TvError
 from mimir_tv.tvmessage import Overlay
 from mimir_tv.tvmessage import router as tvmessage_router
 from mimir_tv.providers import Providers
@@ -391,9 +391,12 @@ def main() -> None:
     resolver = cfg["resolver"] or f"http://127.0.0.1:{port}"
     media_root = Path(cfg["media_root"])
     # 📺 TV opens the Jellyfin TV app when it is closed (the TV trusts this machine's ADB key: Pair on the Settings page).
-    tv = Tv(settings.default_tv(cfg), config / "adbkey") if settings.default_tv(cfg) else None
-    open_app = (lambda: tv_answer(tv.open_jellyfin)) if tv else None
-    play_app = (lambda item_id, ms: tv_answer(lambda: tv.play_in_wholphin(item_id, ms))) if tv else None
+    # The TVs are read from Settings at each use, so a play can name any of them (the phone page's TV menu); tv= is
+    # that TV's address, the first TV without one.
+    tvs = Tvs(lambda: settings.load(config)["tvs"], config / "adbkey")
+    tv = tvs.get() if settings.default_tv(cfg) else None
+    open_app = (lambda tv="": tv_answer(lambda: tvs.get(tv).open_jellyfin())) if tv else None
+    play_app = (lambda item_id, ms, tv="": tv_answer(lambda: tvs.get(tv).play_in_wholphin(item_id, ms))) if tv else None
     # Provider plugins (catalog.py): the ones in Settings whose plugin is installed.
     catalogs = Catalogs(config, vault, data)
     # My list: the Jellyfin favourites, newest first (when each went on it is kept here).
@@ -407,6 +410,7 @@ def main() -> None:
             hidden=lambda: hidden_libraries(catalogs),
             play_app=play_app,
             phone_app=lambda: settings.load(config)["phone_app"],
+            tvs=tvs,
         )
     ]
     # Where titles stream, filtered to the house's apps: TMDB, with its API Read Access Token (from your password manager) in
@@ -418,16 +422,19 @@ def main() -> None:
         pick(cfg["streaming_apps"]),
         cfg["streaming_region"],
     )
-    tv_host = settings.default_tv(cfg)
 
-    def from_tv(request) -> bool:
-        """The TV itself asked: Caddy on this machine passes on who did (X-Forwarded-For); nobody else may say."""
+    def from_tv(request) -> str:
+        """The TV that asked (its address), or "": Caddy on this machine passes on who did (X-Forwarded-For); nobody
+        else may say."""
         caller = request.client.host if request.client else ""
         if caller in ("127.0.0.1", "::1"):
             caller = (request.headers.get("x-forwarded-for") or caller).split(",")[-1].strip()
-        return bool(tv_host) and caller == tv_host.split(":")[0]
+        return next((t["host"] for t in settings.load(config)["tvs"] if caller == t["host"].split(":")[0]), "")
 
-    routers.append(streaming_router(streaming, tv.open_app if tv else None, from_tv))
+    def open_streaming_app(packages: str, title: str = "", url: str = "", tv: str = "") -> None:
+        tvs.get(tv).open_app(packages, title, url)
+
+    routers.append(streaming_router(streaming, open_streaming_app if tv else None, from_tv, tvs))
 
     def watched() -> set[str]:
         try:
@@ -448,7 +455,9 @@ def main() -> None:
     routers.append(app_jobs.router(jobs))
     start_backups(jobs, data, config)
     # The MCP endpoint for an assistant (OpenClaw), behind its own token (D8).
-    routers.append(mcp_router(mcp_token(config / "mcp-token"), tv.now if tv else None))
+    routers.append(
+        mcp_router(mcp_token(config / "mcp-token"), (lambda name="": tvs.get(tvs.host(name)).now()) if tv else None)
+    )
     # What this Mac needs (D9): the Setup page checks each part and installs one only when asked on the Mac itself.
     routers.append(prereqs_router(cfg["jellyfin_url"]))
     # Then setup itself on the same page, one step at a time; it locks once every step is done or skipped.
@@ -463,10 +472,15 @@ def main() -> None:
     # A provider plugin's pages, the resolver its .strm files point at, and the hourly jobs.
     start_resolver(catalogs, port, jf=jf)
     routers.append(
-        catalog_router(catalogs, jf, kodi, media_root, resolver, data / "thumbs", open_app, play_app=play_app)
+        catalog_router(catalogs, jf, kodi, media_root, resolver, data / "thumbs", open_app, play_app=play_app, tvs=tvs)
     )
     start_provider_jobs(jobs, catalogs, jf, media_root, resolver, streaming)
-    connectors = {"providers": lambda: listing(catalogs), "kodi": kodi is not None, "tv": tv is not None}
+    connectors = {
+        "providers": lambda: listing(catalogs),
+        "kodi": kodi is not None,
+        "tv": tv is not None,
+        "tvs": tvs.names,
+    }
     names = [*cfg["hosts"], urlsplit(resolver).hostname or ""]  # the TV reaches this app by the resolver's name
     app = create_app(
         jf, picks, *routers, connectors=connectors, other_paths=plugin_paths(catalogs, resolver), hosts=names

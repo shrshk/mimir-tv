@@ -81,7 +81,7 @@ Wholphin's own app settings (playback, theme) stay on each TV.
 | `media_root` | `~/Documents/media` | A plugin provider's `.strm` files: `<id>/`, `<id>-movies/`, `<id>-live/` |
 | `resolver` | `http://127.0.0.1:8724` | The address players reach a provider's links at (see below) |
 | `resolver_port` | `8724` | The port the resolver listens on |
-| `tvs` | (none) | The TVs, `[{"name", "host", "kind": "android" \| "fire"}]`; the first is the default for 📺 TV (`tv_host`, one TV's IP, still works) |
+| `tvs` | (none) | The TVs, `[{"name", "host", "kind": "android" \| "fire"}]`; the first is the default for 📺 TV and the phone page's TV menu lists them all (`tv_host`, one TV's IP, still works) |
 | `kodi_url`, `kodi_password_file` | (none) | Kodi on the TV (user `kodi`), the other way to play on the TV |
 | `streaming_apps` | (all) | The streaming apps you have, e.g. `netflix,prime,peacock` (keys in `streaming.py`'s `APPS`) |
 | `streaming_region` | `US` | The country whose streaming catalogues count |
@@ -103,7 +103,8 @@ are files readable by you only.
   search over all of it (each provider's own search, results labelled with its name).
 - **Playing**: ▶ Jellyfin plays it in Jellyfin: on an iPhone it opens Swiftfin at the item and the Air starts it
   playing there (Jellyfin's remote control; Swiftfin 1.6 or later), elsewhere Jellyfin's web app. 📺 TV starts it in
-  the TV's Jellyfin app (waking the TV and opening the app if needed). Play here plays it in the page's own player
+  the TV's Jellyfin app (waking the TV and opening the app if needed). With more than one TV in Settings, a menu in
+  the top bar picks which TV 📺 plays on (kept on each phone); the assistant names one with `tv`. Play here plays it in the page's own player
   (picture in picture, AirPlay, the lock screen): through Jellyfin, it starts where any Jellyfin app left off, saves
   its place and played marks there (so Continue watching is the same on the TV), and goes on to the next episode after
   a short countdown. Kodi is the other option. For a provider's title, ＋ Jellyfin first adds it as `.strm` files (a

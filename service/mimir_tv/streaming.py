@@ -22,9 +22,9 @@ from urllib.parse import quote, urlsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from mimir_tv.tv import TvError
+from mimir_tv.tv import Tvs, TvError, aimed, tv_address
 
 API = "https://api.themoviedb.org/3"
 # The app's own link for a title (TMDB has none): JustWatch's listing, matched to the title by its TMDB id. An
@@ -401,6 +401,7 @@ class Open(BaseModel):
     app: str
     title: str = ""
     tmdb: str = ""  # "tv/96677": then the app opens at the title itself where JustWatch has its link
+    tv: str = Field("", max_length=100)  # which TV (its name in Settings); the first one when empty
 
 
 LAUNCH_CLIP = Path(__file__).parent / "static" / "launch.mp4"  # 3 s of black, what the player shows meanwhile
@@ -409,8 +410,11 @@ LAUNCH_CLIP = Path(__file__).parent / "static" / "launch.mp4"  # 3 s of black, w
 def router(
     streaming: Streaming,
     open_app: Callable[[str, str, str], None] | None,
-    from_tv: Callable[[Request], bool] = lambda request: False,
+    from_tv: Callable[[Request], str] = lambda request: "",
+    tvs: Tvs | None = None,
 ) -> APIRouter:
+    """open_app takes a TV's address as tv= (the default TV without one). from_tv: the address of the TV that sent the
+    request, or "" when no TV did."""
     api = APIRouter(prefix="/api/streaming")
 
     @api.get("/status")
@@ -454,7 +458,12 @@ def router(
         if open_app is None:
             raise HTTPException(409, "No TV set up (add one on the Settings page)")
         try:
-            open_app(app.packages, body.title[:200], streaming.title_link(app, body.tmdb, body.title[:200]))
+            host = tv_address(tvs, body.tv)
+        except LookupError as e:
+            raise HTTPException(404, str(e)) from e
+        try:
+            link = streaming.title_link(app, body.tmdb, body.title[:200])
+            aimed(open_app, host)(app.packages, body.title[:200], link)
         except TvError as e:
             raise HTTPException(502, str(e)) from e
 
@@ -465,10 +474,12 @@ def router(
         found = next((a for a in streaming.apps if a.key == app), None)
         if found is None:
             raise HTTPException(404, "not one of the house's apps")
-        if open_app is not None and from_tv(request):
+        asking = from_tv(request)
+        if open_app is not None and asking:  # the app opens on the TV that plays the file
             name = title[:200]
             link = streaming.title_link(found, tmdb, name)
-            threading.Thread(target=lambda: tv_quiet(open_app, found.packages, name, link), daemon=True).start()
+            there = aimed(open_app, asking)
+            threading.Thread(target=lambda: tv_quiet(there, found.packages, name, link), daemon=True).start()
         return FileResponse(LAUNCH_CLIP, media_type="video/mp4")
 
     @api.get("/go")

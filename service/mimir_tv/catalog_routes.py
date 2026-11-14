@@ -16,7 +16,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from mimir_tv.catalog import Catalog, CatalogError, Catalogs, Served, node_id, node_parts
@@ -24,7 +24,8 @@ from mimir_tv.hls import PASS, HlsError, HlsRelay, from_tailnet, is_hls, is_play
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
 from mimir_tv.kodi import Kodi, KodiError
 from mimir_tv.strm import add, follow, followed, play_line, safe, show_folder, write_movie, write_show
-from mimir_tv.tv import TvError
+from mimir_tv.jf_routes import which_tv
+from mimir_tv.tv import Tvs, TvError, aimed
 
 THUMB = "/api/thumb?u="
 
@@ -43,6 +44,7 @@ class Video(BaseModel):
     title: str = "Video"
     page: str = ""  # the list it is in (node); a live channel's link is refreshed from there when it expires
     tv: bool = False  # start it in the Jellyfin TV app; otherwise just return its Jellyfin id
+    which_tv: str = Field("", max_length=100)  # on that TV (its name in Settings); the first one when empty
 
 
 class Show(BaseModel):
@@ -50,6 +52,7 @@ class Show(BaseModel):
     title: str
     episode: str = ""  # one episode's link; the whole show when empty
     tv: bool = False
+    which_tv: str = Field("", max_length=100)
 
 
 def router(
@@ -62,6 +65,7 @@ def router(
     open_app=None,
     hls: HlsRelay | None = None,
     play_app=None,
+    tvs: Tvs | None = None,
 ) -> APIRouter:
     hls = hls or HlsRelay()
     api = APIRouter()
@@ -285,17 +289,18 @@ def router(
         else:
             jellyfin(jf.scan, lib.get("ItemId"))
 
-    def hand_over(pid: str, library: str, path: Path, tv: bool) -> str:
+    def hand_over(pid: str, library: str, path: Path, tv: bool, host: str = "") -> str:
         item_id = jellyfin(jf.find, library, str(path))
         known.pop(pid, None)  # Jellyfin has something new
         if tv:
-            jellyfin(lambda: jf.play_on_tv(item_id, open_app, play_app=play_app))
+            jellyfin(lambda: jf.play_on_tv(item_id, aimed(open_app, host), play_app=aimed(play_app, host), host=host))
         return item_id
 
     @api.post("/api/p/{pid}/jellyfin")
     def show_in_jellyfin(pid: str, show: Show):
         """A show: its episodes as .strm files in the provider's shows library; Jellyfin's id for it (or for one
         episode)."""
+        host = which_tv(tvs, show.which_tv)  # an unknown TV is refused before anything is written
         entry, cat = provider(pid)
         url = page_url(pid, cat, show.node)
         root = roots(media_root, pid)["shows"]
@@ -306,13 +311,14 @@ def router(
             raise HTTPException(404, "no such episode in this show")
         ensure_library(libraries(entry)["shows"], "tvshows", root)
         path = files[show.episode] if show.episode else root / safe(folder)
-        return {"id": hand_over(pid, libraries(entry)["shows"], path, show.tv), "episodes": len(files)}
+        return {"id": hand_over(pid, libraries(entry)["shows"], path, show.tv, host), "episodes": len(files)}
 
     @api.post("/api/p/{pid}/jellyfin/video")
     def video_in_jellyfin(pid: str, v: Video):
         """One video: on demand (signed when played) in "<name> Movies", a live stream in "<name> Live"."""
         if not v.url.startswith("https://"):
             raise HTTPException(400, "not a playable link")
+        host = which_tv(tvs, v.which_tv)
         entry, cat = provider(pid)
         only_listed(cat, v.url)  # the .strm file sends players to it through the resolver, which asks the same
         which = "movies" if cat.on_demand(v.url) else "live"
@@ -321,7 +327,7 @@ def router(
         target = write_movie(pid, v.url, v.title, root, resolver, page)
         add(root, target.parent.name)  # kept when the whole catalogue is limited (mirror.prune)
         ensure_library(library, "movies" if which == "movies" else "homevideos", root)
-        return {"id": hand_over(pid, library, target, v.tv)}
+        return {"id": hand_over(pid, library, target, v.tv, host)}
 
     return api
 
