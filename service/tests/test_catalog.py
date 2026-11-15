@@ -240,6 +240,17 @@ def test_routes_browse_play_and_add_to_jellyfin(home, cat, tmp_path, monkeypatch
     assert jf.reindexed == 1  # search finds it now, not after the nightly full scan
     line = (tmp_path / "media/tv1-movies/Heat (1995)/Heat (1995).strm").read_text().strip()
     assert parse_qs(urlsplit(line).query) == {"p": ["tv1"], "path": [MOVIE]}
+    # The same title from another language's list is another film (a dub): its own folder and Jellyfin item, the
+    # first one's file left as it is.
+    dub = "https://files.example/movies/heat-hindi.mkv"
+    cat.pages[SECTIONS["Movies"]].append(video("Heat (1995)", dub))
+    assert c.post("/api/p/tv1/jellyfin/video", json={"url": dub, "title": "Heat (1995)"}).json() == {
+        "id": "strm:Heat (1995) (2)"
+    }
+    assert (tmp_path / "media/tv1-movies/Heat (1995)/Heat (1995).strm").read_text().strip() == line
+    listed = c.get("/api/p/tv1/browse", params={"node": node_id("tv1", SECTIONS["Movies"])}).json()["items"]
+    assert [i["jf_id"] for i in listed] == ["strm:Heat (1995)", "", "strm:Heat (1995) (2)"]
+    cat.pages[SECTIONS["Movies"]].pop()
     live_url = cat.pages[SECTIONS["Live"]][0]["url"]
     live = c.post(
         "/api/p/tv1/jellyfin/video",
@@ -251,7 +262,7 @@ def test_routes_browse_play_and_add_to_jellyfin(home, cat, tmp_path, monkeypatch
 
     # A show: the whole show, or one episode of it (found by its file).
     whole = c.post("/api/p/tv1/jellyfin", json={"node": dark["node"], "title": "Dark"}).json()
-    assert whole == {"id": "series:Dark", "episodes": 3} and "My TV" in jf.libs and jf.reindexed == 3
+    assert whole == {"id": "series:Dark", "episodes": 3} and "My TV" in jf.libs and jf.reindexed == 4
     one = c.post(
         "/api/p/tv1/jellyfin", json={"node": dark["node"], "title": "Dark", "episode": EP.format(s=1, e=2), "tv": True}
     ).json()
@@ -772,6 +783,23 @@ def test_into_jellyfin_previews_without_moving_anything_then_saves_the_houses_ch
         1,
         False,
     )
+
+
+def test_a_dub_added_by_hand_is_its_own_film_and_the_mirror_leaves_its_folder_alone(cat, tmp_path):
+    root, air = tmp_path / "tv1-movies", "http://air:8724"
+    dub = "https://files.example/movies/heat-hindi.mkv"
+    plain = cat.everything
+    cat.everything = lambda: [x | {"language": "English"} if x["url"] == MOVIE else x for x in plain()] + [
+        {"kind": "movie", "url": dub, "title": "Heat (1995)", "page": SECTIONS["Movies"], "language": "Hindi"}
+    ]
+    # Added by hand first: the catalogue has Heat in two languages, so its name in Jellyfin says which.
+    f = mirror.movie_by_hand(cat, "tv1", dub, "Heat (1995)", root, air)
+    add(root, f.parent.name)
+    assert f.parent.name == "Heat (1995)" and "<title>Heat · Hindi</title>" in (f.parent / "movie.nfo").read_text()
+    # The whole catalogue then writes the English one in a folder of its own; the dub's file still plays the dub.
+    mirror.mirror(cat, "tv1", tmp_path / "tv1", root, air)
+    assert quote(dub, safe="") in (root / "Heat (1995)/Heat (1995).strm").read_text()
+    assert quote(MOVIE, safe="") in (root / "Heat (1995) (2)/Heat (1995) (2).strm").read_text()
 
 
 def test_mirrored_titles_get_their_language_kind_channel_and_poster_in_jellyfins_files(cat, tmp_path):

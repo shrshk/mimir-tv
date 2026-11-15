@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
+from mimir_tv import mirror
 from mimir_tv.catalog import Catalog, CatalogError, Catalogs, Served, node_id, node_parts
 from mimir_tv.hls import PASS, HlsError, HlsRelay, from_tailnet, is_hls, is_playlist
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
@@ -328,7 +329,10 @@ def router(
         which = "movies" if cat.on_demand(v.url) else "live"
         library, root = libraries(entry)[which], roots(media_root, pid)[which]
         page = page_url(pid, cat, v.page) if v.page else ""
-        target = write_movie(pid, v.url, v.title, root, resolver, page)
+        if which == "movies":
+            target = mirror.movie_by_hand(cat, pid, v.url, v.title, root, resolver, page)
+        else:
+            target = write_movie(pid, v.url, v.title, root, resolver, page)
         add(root, target.parent.name)  # kept when the whole catalogue is limited (mirror.prune)
         ensure_library(library, "movies" if which == "movies" else "homevideos", root)
         return {"id": hand_over(pid, library, target, v.tv, host)}

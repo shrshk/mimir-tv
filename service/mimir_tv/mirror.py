@@ -27,7 +27,7 @@ import shutil
 import time
 from xml.sax.saxutils import escape
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 import httpx
 
@@ -102,7 +102,8 @@ def mirror(
     listed = wanted(everything, languages or [], per_category)
     out = {"movies": 0, "shows": 0, "episodes": 0, "failed": 0, "details": 0, "posters": 0}
 
-    movies, taken_movies, changed = mirrored(movies_root), {}, False
+    # Movies added by hand keep their folders: a mirrored one of the same title (a dub, often) gets its own.
+    movies, taken_movies, changed = mirrored(movies_root), links(movies_root, added(movies_root)), False
     listed_movies = [x for x in listed if x["kind"] == "movie"]
     # Folders already written keep their movie: reserved before any new movie is named, so a new one listed first
     # never takes a folder (and Jellyfin's item, with its watch progress) from one listed after it.
@@ -248,6 +249,42 @@ def write_details(
     if labels is not None and badges.apply(folder, labels):
         changed = True
     return changed, fetched
+
+
+def links(root: Path, names: list[str]) -> dict[str, str]:
+    """Folder name (lower case) -> the link its .strm file plays, for these folders of root."""
+    out = {}
+    for name in names:
+        f = root / name / f"{name}.strm"
+        found = parse_qs(urlsplit(f.read_text().strip()).query).get("path", []) if f.is_file() else []
+        if found:
+            out[name.lower()] = found[0]
+    return out
+
+
+def movie_by_hand(cat: Catalog, pid: str, url: str, title: str, root: Path, resolver: str, page: str = "") -> Path:
+    """One movie added by hand, named as the mirror names them: the folder the mirror wrote for this link if any,
+    otherwise its own (a number after the title when another link has it, as a dub in another language does). Its
+    .nfo carries the language in the name when the catalogue has the title in several. Returns its .strm file."""
+    movies = mirrored(root)
+    rec = movies.get(url)
+    if rec and points_at(root, rec, {"url": url}):
+        name = rec["name"]
+    else:
+        taken = links(root, [d.name for d in root.iterdir() if d.is_dir()] if root.is_dir() else [])
+        name = folder_name(title, url, {r["name"].lower(): u for u, r in movies.items()} | taken)
+    target = write_movie(pid, url, name, root, resolver, page)
+    try:
+        everything = cat.everything()
+    except CatalogError:
+        everything = []
+    x = next((x for x in everything if x["url"] == url), None)
+    if x:
+        several = (x["kind"], base_title(x["title"])[0].lower()) in in_several_languages(everything)
+        f, text = target.parent / "movie.nfo", nfo("movie", x, several)
+        if not f.exists() or f.read_text() != text:
+            f.write_text(text)
+    return target
 
 
 def points_at(root: Path, rec: dict, movie: dict) -> bool:
