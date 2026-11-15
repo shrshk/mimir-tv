@@ -72,6 +72,15 @@ class Jellyfin:
         else:
             self._call("POST", "/Library/Refresh")
 
+    def reindex_search(self) -> None:
+        """Jellyfin's search index (the Meilisearch plugin, when it is there) re-reads the library now. On its own it
+        does so only after a full library scan, so a title added to one library is not found by search till then."""
+        for t in self._call("GET", "/ScheduledTasks") or []:
+            if str(t.get("Key", "")).startswith("task-meilisearch-reindex"):
+                if t.get("State") != "Running":
+                    self._call("POST", f"/ScheduledTasks/Running/{t['Id']}")
+                return
+
     def scan_task(self) -> dict | None:
         """The library scan, when one is running: its progress in percent."""
         for t in self._call("GET", "/ScheduledTasks") or []:

@@ -237,6 +237,7 @@ def test_routes_browse_play_and_add_to_jellyfin(home, cat, tmp_path, monkeypatch
     # Jellyfin first: a movie lands in "My TV Movies", a live channel in "My TV Live"; the id comes back.
     movie = c.post("/api/p/tv1/jellyfin/video", json={"url": MOVIE, "title": "Heat (1995)"})
     assert movie.json() == {"id": "strm:Heat (1995)"} and jf.played == []
+    assert jf.reindexed == 1  # search finds it now, not after the nightly full scan
     line = (tmp_path / "media/tv1-movies/Heat (1995)/Heat (1995).strm").read_text().strip()
     assert parse_qs(urlsplit(line).query) == {"p": ["tv1"], "path": [MOVIE]}
     live_url = cat.pages[SECTIONS["Live"]][0]["url"]
@@ -250,7 +251,7 @@ def test_routes_browse_play_and_add_to_jellyfin(home, cat, tmp_path, monkeypatch
 
     # A show: the whole show, or one episode of it (found by its file).
     whole = c.post("/api/p/tv1/jellyfin", json={"node": dark["node"], "title": "Dark"}).json()
-    assert whole == {"id": "series:Dark", "episodes": 3} and "My TV" in jf.libs
+    assert whole == {"id": "series:Dark", "episodes": 3} and "My TV" in jf.libs and jf.reindexed == 3
     one = c.post(
         "/api/p/tv1/jellyfin", json={"node": dark["node"], "title": "Dark", "episode": EP.format(s=1, e=2), "tv": True}
     ).json()

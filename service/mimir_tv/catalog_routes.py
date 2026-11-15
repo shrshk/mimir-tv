@@ -292,6 +292,10 @@ def router(
     def hand_over(pid: str, library: str, path: Path, tv: bool, host: str = "") -> str:
         item_id = jellyfin(jf.find, library, str(path))
         known.pop(pid, None)  # Jellyfin has something new
+        try:
+            jf.reindex_search()
+        except JellyfinError:
+            pass  # search finds it after the nightly full scan instead
         if tv:
             jellyfin(lambda: jf.play_on_tv(item_id, aimed(open_app, host), play_app=aimed(play_app, host), host=host))
         return item_id

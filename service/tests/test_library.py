@@ -20,6 +20,7 @@ class FakeJellyfin:
         self.removed: set[str] = set()  # items deleted in Jellyfin (their files may still be there)
         self.favourites: set[str] = set()
         self.watched: set[str] = set()  # paths of watched or part-watched items
+        self.reindexed = 0  # times its search index (the Meilisearch plugin) was asked to re-read the library
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         q, path, m = request.url.params, request.url.path, request.method
@@ -61,10 +62,16 @@ class FakeJellyfin:
             self.scans.append("all")
             return httpx.Response(204)
         if path == "/ScheduledTasks":
-            tasks = [{"Key": "RefreshLibrary", "Name": "Scan Media Library", "State": "Idle"}]
+            tasks = [
+                {"Key": "RefreshLibrary", "Name": "Scan Media Library", "State": "Idle"},
+                {"Key": "task-meilisearch-reindex-full", "Id": "meili", "State": "Idle"},
+            ]
             if self.running is not None:
                 tasks[0] |= {"State": "Running", "CurrentProgressPercentage": self.running}
             return httpx.Response(200, json=tasks)
+        if path == "/ScheduledTasks/Running/meili" and m == "POST":
+            self.reindexed += 1
+            return httpx.Response(204)
         if path == "/Items" and q.get("SearchTerm"):  # Jellyfin's search: the shows a scan would find, by name
             term = q["SearchTerm"].lower()
             shows = [
