@@ -27,8 +27,11 @@
   /* Header: logo, top tabs (wide screens), search */
   header { position:sticky; top:0; z-index:3; display:flex; align-items:center; gap:18px; padding:10px 16px;
            padding-top:calc(env(safe-area-inset-top) + 10px); background:#000; }  /* solid: iOS draws text under a backdrop blur at low resolution until a scroll */
-  #logo { font-weight:900; font-size:22px; letter-spacing:1px; color:var(--accent); text-decoration:none; text-transform:uppercase; line-height:1; }
-  #logo span { color:var(--ink); }
+  /* The app icon and a lowercase, rounded name: mimir-tv's own look */
+  #logo { display:inline-flex; align-items:center; gap:8px; font:700 21px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+          color:var(--ink); text-decoration:none; white-space:nowrap; }
+  #logo img { width:30px; height:30px; border-radius:8px; display:block; }
+  #logo span { color:#f2545b; }
   /* The TV 📺 plays on, when the house has more than one (hidden otherwise) */
   #tvpick { width:auto; max-width:40vw; padding:6px 8px; font-size:15px; }
   .topnav { display:none; gap:4px; }
@@ -262,7 +265,7 @@ if (new URLSearchParams(location.search).has("tv")) document.documentElement.cla
 </head>
 <body>
 <header>
-  <a id="logo" href="/" aria-label="Home">Mimir<span>tv</span></a>
+  <a id="logo" href="/" aria-label="Home"><img src="/icon-192.png" alt="">mimir<span>tv</span></a>
   <nav class="topnav"><button data-tab="home" class="on">Home</button><button data-tab="list">My list</button><button data-tab="library">Library</button></nav>
   <span class="grow"></span>
   <select id="tvpick" aria-label="Which TV 📺 plays on" title="Which TV 📺 plays on" hidden></select>
