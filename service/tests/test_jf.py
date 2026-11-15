@@ -1,4 +1,5 @@
 import json
+import re
 import time
 
 import httpx
@@ -107,10 +108,10 @@ def fake(request: httpx.Request) -> httpx.Response:
         )
     if p == "/Shows/NextUp":
         return httpx.Response(500, text="boom") if NEXT_UP is None else httpx.Response(200, json={"Items": NEXT_UP})
-    if p == "/Items" and "SearchTerm" in q:
-        return httpx.Response(
-            200, json={"Items": [i for i in ITEMS.values() if q["SearchTerm"].lower() in i["Name"].lower()]}
-        )
+    if p == "/Items" and "SearchTerm" in q:  # loose, as Jellyfin's is: any one word of the search is enough
+        words = [w for w in re.split(r"\W+", q["SearchTerm"].lower()) if len(w) > 1]
+        named = lambda i: f"{i['Name']} {i.get('SeriesName', '')}".lower()  # noqa: E731
+        return httpx.Response(200, json={"Items": [i for i in ITEMS.values() if any(w in named(i) for w in words)]})
     if p == f"/Videos/{MOVIE}/stream":
         assert "Token=" in request.headers["Authorization"]
         rng = request.headers.get("Range")
@@ -214,6 +215,10 @@ def test_browse_search_and_pick_how_to_play(tmp_path):
         ("Old clip", "video", "60 min"),
     ]
     assert [i["title"] for i in c.get("/api/jf/search", params={"q": "wedding"}).json()] == ["Wedding Film 4K"]
+    # Jellyfin's loose matches stay out: every word must be in the name (or the show's name), in any order.
+    search = lambda q: [i["title"] for i in c.get("/api/jf/search", params={"q": q}).json()]  # noqa: E731
+    assert search("Pilot: A Show!") == ["Pilot"]
+    assert search("old wedding") == []
     found = c.get("/api/jf/search", params={"q": "ndtv"}).json()
     assert [(i["title"], i["kind"], i["sub"]) for i in found] == [("NDTV 24x7", "video", "Live TV")]
 

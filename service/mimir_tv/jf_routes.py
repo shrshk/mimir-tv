@@ -6,6 +6,7 @@ key on the Air. Files Safari plays as they are (MP4/MOV with H.264/HEVC) stream 
 through Jellyfin's HLS, which converts on the Air's hardware."""
 
 import re
+import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Literal
@@ -57,6 +58,20 @@ class Watching(BaseModel):
     position: float = Field(ge=0)  # seconds
     duration: float = Field(default=0, ge=0)  # seconds, for an item Jellyfin knows no length of
     paused: bool = False
+
+
+def words(text: str) -> list[str]:
+    """Lowercase words without accents or punctuation: "M.S. Dhoni: Café" -> ["m", "s", "dhoni", "cafe"]."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    return re.findall(r"[^\W_]+", plain.lower())
+
+
+def named(q: str, i: dict) -> bool:
+    """Every word of the search (of two letters or more) is in the item's name, its original name or its show's name,
+    in any order. Jellyfin's own search is loose: "M.S. Dhoni: The Untold Story" also finds M*A*S*H and McCloud."""
+    hay = " ".join(words(" ".join(filter(None, (i.get("Name"), i.get("OriginalTitle"), i.get("SeriesName"))))))
+    squashed = hay.replace(" ", "")  # "ms" finds "M.S."
+    return all(w in hay or w in squashed for w in words(q) if len(w) > 1)
 
 
 def card(i: dict) -> dict:
@@ -152,7 +167,8 @@ def router(
     @api.get("/api/jf/search")
     def search(q: str):
         # TvChannel: live channels from an IPTV provider (M2), played by Jellyfin's Live TV
-        return [card(i) for i in guard(jf.search, q) if i.get("Type") in PLAYABLE | {"Series", "Folder", "TvChannel"}]
+        found = guard(jf.search, q)
+        return [card(i) for i in found if i.get("Type") in PLAYABLE | {"Series", "Folder", "TvChannel"} and named(q, i)]
 
     @api.get("/api/jf/title")
     def title_page(id: str = Query(pattern=ID)):
