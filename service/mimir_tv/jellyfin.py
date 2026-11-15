@@ -444,11 +444,13 @@ class Jellyfin:
         self._call("POST", f"/Sessions/{tv['Id']}/Playing", params)
 
     def library_items(self, library: str) -> list[dict]:
-        """A library's movies, shows, episodes and videos with their paths ([] when there is no such library)."""
+        """A library's movies, shows, episodes and videos with their paths ([] when there is no such library). Asked as
+        the user: without one, Jellyfin 12 lists only some of a library (10 of 210 movies here)."""
         lib = next((x for x in self.libraries() or [] if x["Name"] == library), None)
         if not (lib and lib.get("ItemId")):
             return []
         params = {
+            "userId": self.user(),
             "ParentId": lib["ItemId"],
             "Recursive": "true",
             "Fields": "Path",

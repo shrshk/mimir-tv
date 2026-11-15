@@ -92,6 +92,8 @@ class FakeJellyfin:
             hits = [{"Id": f"series:{d.name}", "Path": str(d)} for d in shows if f"series:{d.name}" in self.favourites]
             return httpx.Response(200, json={"Items": hits})
         if path == "/Items" and q.get("Fields") == "Path":  # what a scan found: .strm files, and each show's folder
+            if not q.get("userId"):  # as Jellyfin 12 does: without a user, a library lists only some of its items
+                return httpx.Response(200, json={"Items": []})
             lib = next(x for x in self.libs.values() if x["ItemId"] == q["ParentId"])
             items = []
             for root in map(Path, lib["Locations"]):
