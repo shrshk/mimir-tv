@@ -591,7 +591,10 @@ function actions(v, k, ctx) {
 function playActions(v, k, ctx) {
   const c = ctx === "sheet" ? 1 : 0;
   // + My list: titles in the home library only (a Jellyfin favourite), in a sheet and on a provider's rows.
-  const mine = v.id || v.jf_id ? (ctx === "sheet" || !v.id ? listBtn({jf: v.id || v.jf_id, title: v.title}) : "") : "";
+  // A title Jellyfin does not have yet goes into it first (one episode of a show stays off: the show goes on it).
+  const ep = ctx !== "sheet" && current && current.episodic;
+  const mine = v.id || v.jf_id ? (ctx === "sheet" || !v.id ? listBtn({jf: v.id || v.jf_id, title: v.title}) : "")
+    : TV || ep ? "" : `<button class="alt" onclick="go('list',${k},${c})">＋ My list</button>`;
   if (TV) return `<button class="p" onclick="go('tv',${k},${c})">▶ Play</button>` + mine;
   // Your videos and a provider's items Jellyfin has (jf_id, from Jellyfin itself): ▶ opens them in Jellyfin (Swiftfin
   // on the iPhone); others: ＋ adds them. Play here plays in this page, through Jellyfin when it has the item.
@@ -712,31 +715,30 @@ async function go(how, k, fromSheet) {
     // Jellyfin has it already: play it by its id (adding it again would rewrite its file mid-play).
     const known = ctx.jf ? v.id : how === "tv" && v.jf_id;
     if (known) { await api("/api/jf/tv", {method:"POST", body:{id:known, tv: tvChoice}}); return toast(`Playing in Jellyfin on ${tvLabel()}`); }
-    toast(how === "tv" ? `Starting in Jellyfin on ${tvLabel()}…` : "Adding to Jellyfin…");
+    toast(how === "tv" ? `Starting in Jellyfin on ${tvLabel()}…` : how === "list" ? "Adding to My list…" : "Adding to Jellyfin…");
     const tv = how === "tv", which_tv = tv ? tvChoice : "";
     const r = ctx.episodic
       ? await api(P(v.p) + "/jellyfin", {method:"POST", body:{...showOf(ctx), episode:v.url, tv, which_tv}})
       : await api(P(v.p) + "/jellyfin/video", {method:"POST", body:{url:v.url, title, tv, which_tv, page: fromSheet ? v.page || "" : ctx.node || ""}});
-    // Added by hand: wanted, so on My list too (a Jellyfin favourite, which every Jellyfin app lists). An episode
-    // stays off it; its show is what goes on the list.
-    const listed = !tv && !ctx.episodic && await toList(r.id);
+    const listed = how === "list" && await toList(r.id);
     // A window opened after this wait is blocked on the iPhone, so the link is tapped from the message.
     markAdded(ctx, v, r.id, !!fromSheet);
     if (tv) toast(`Playing in Jellyfin on ${tvLabel()}`);
-    else toast(listed ? "Added to Jellyfin and My list" : "Added to Jellyfin", r.id, true);
+    else toast(listed ? "Added to My list" : "Added to Jellyfin", r.id, true);
   } catch (e) { toast(e.message); }
 }
 
-async function openShow() {
-  toast("Adding to Jellyfin…");
+async function openShow(list) {
+  toast(list ? "Adding to My list…" : "Adding to Jellyfin…");
   try {
     const s = showOf(current);
     const r = await api(P(pidOf(s.node)) + "/jellyfin", {method:"POST", body:s});
-    toast(await toList(r.id) ? "Added to Jellyfin and My list" : "Added to Jellyfin", r.id);
+    toast(list && await toList(r.id) ? "Added to My list" : "Added to Jellyfin", r.id);
     reloadPage();
   } catch (e) { toast(e.message); }
 }
 
+// My list is Jellyfin's favourites (every Jellyfin app lists them).
 async function toList(id) {
   try { await api("/api/jf/list", {method:"POST", body:{id}}); saved.add("jf:" + id); return true; } catch (e) { return false; }
 }
@@ -793,7 +795,7 @@ async function open(node, title, push = true) {
     current = {node, title: title || d.title, items: d.items, jf: jfNode, jf_id: d.jf_id || "", inJf: !!d.jf_id || (videos.length > 0 && videos.every(v => v.jf_id))};
     const isShow = videos.length || (folders.length && folders.every(f => /season|part|volume/i.test(f.title)));
     let html = "";
-    if (isShow && node && !jfNode && episodicShow(d.items)) html += `<div class="showbar">${d.items[0] && d.items[0].desc ? `<div class="mute">${esc(d.items[0].desc)}</div>` : ""}<div class="row big">${current.jf_id && !TV ? jfOpen(current.jf_id, "▶ Show in Jellyfin") : current.jf_id || current.inJf ? "" : `<button class="p" onclick="openShow()">＋ Add show to Jellyfin</button>`}${showSave()}${appButtons({title: current.title, ...(shows[node] || {})})}</div></div>`;
+    if (isShow && node && !jfNode && episodicShow(d.items)) html += `<div class="showbar">${d.items[0] && d.items[0].desc ? `<div class="mute">${esc(d.items[0].desc)}</div>` : ""}<div class="row big">${current.jf_id && !TV ? jfOpen(current.jf_id, "▶ Show in Jellyfin") : current.jf_id || current.inJf ? "" : `<button class="p" onclick="openShow()">＋ Add show to Jellyfin</button><button class="lb" onclick="openShow(true)">＋ My list</button>`}${showSave()}${appButtons({title: current.title, ...(shows[node] || {})})}</div></div>`;
     if (jfNode && d.desc) html += `<div class="showbar"><div class="mute">${esc(d.desc)}</div></div>`;
     html += folders.map(f => tile(f, f.sub)).join("");
     current.episodic = !jfNode && videos.some(v => /episode|\bep\s*\d/i.test(v.title));
