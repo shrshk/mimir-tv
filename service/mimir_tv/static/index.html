@@ -103,6 +103,9 @@
   .tile .art .apps b.netflix { background:#e50914; } .tile .art .apps b.prime { background:#00a8e1; }
   .tile .art .apps b.peacock { background:#111; border:1px solid #fff4; } .tile .art .apps b.youtube { background:#f00; }
   .tile .art .apps b.espn { background:#c00; } .tile .art .apps b.prov { background:#f28c28; color:#1a1208; } .tile .art .apps b.sling { background:#0072ce; }
+  /* ♥: on My list (a Jellyfin favourite) */
+  .tile .art .fav { position:absolute; top:6px; right:6px; z-index:1; font-size:13px; line-height:1; background:#000b; color:#ff5a6e; border-radius:10px; padding:3px 5px; }
+  .tile .art .new ~ .fav { top:28px; }
   .tile .art .new { position:absolute; top:6px; right:6px; z-index:1; font-size:11px; font-weight:700; background:var(--accent); color:#fff; border-radius:4px; padding:1px 6px; }
   .tile .rm { position:absolute; bottom:6px; right:6px; z-index:1; width:28px; height:28px; padding:0; border-radius:50%; background:#000b; color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; }
   .tile .art .folder { position:absolute; top:6px; right:6px; font-size:11px; background:#000a; color:#fff; border-radius:4px; padding:1px 6px; }
@@ -557,7 +560,8 @@ function tile(i, sub) {
   const badges = (i.apps || []).map(a => `<b class="${esc(a.app)}">${esc(a.name)}</b>`).concat(i.src ? [`<b class="prov">${esc(i.src)}</b>`] : []);
   const apps = badges.length ? `<span class="apps">${badges.join("")}</span>` : "";
   if (i.kind === "folder" && i.node) shows[i.node] = {thumb: i.thumb || "", sub: i.sub || "", apps: i.apps, tmdbRef: i.tmdbRef, tmdbTitle: i.tmdbTitle};  // for the app buttons on its page
-  return `<div class="tile" tabindex="0" ${attrs} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${apps}</div>`
+  const jf = i.id || i.jf_id, key = jf ? `jf:${jf}` : "";
+  return `<div class="tile" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
     + (i.progress ? `<div class="bar2" style="width:${i.progress}%"></div>` : "")
     + `<div class="t">${esc(i.title)}</div>${line ? `<div class="s">${esc(line)}</div>` : ""}</div>`;
 }
@@ -642,7 +646,13 @@ const keyOf = t => "jf:" + t.jf;
 async function loadList() {
   const l = (await api("/api/jf/list").catch(() => [])).map(t => ({...t, jf: t.id, key: "jf:" + t.id}));
   saved = new Set(l.map(i => i.key));
+  paintFavs();
   return l;
+}
+const favMark = key => `<span class="fav" aria-label="On My list"${saved.has(key) ? "" : " hidden"}>♥</span>`;
+// The ♥ on every poster follows My list as it changes.
+function paintFavs() {
+  document.querySelectorAll(".tile[data-jfkey] .fav").forEach(f => f.hidden = !saved.has(f.closest(".tile").dataset.jfkey));
 }
 function listBtn(t) {
   const on = saved.has(keyOf(t));
@@ -655,6 +665,7 @@ async function toggleList(n) {
     else await api("/api/jf/list", {method:"POST", body:{id: t.jf}});
   } catch (e) { return toast(e.message); }
   on ? saved.delete(key) : saved.add(key);
+  paintFavs();
   document.querySelectorAll(".lb").forEach(b => { if (b.dataset.key === key) b.textContent = on ? "＋ My list" : "✓ My list"; });
   toast(on ? "Removed from My list" : "Added to My list");
   if (current && current.node === "__list") myList();
@@ -740,7 +751,7 @@ async function openShow(list) {
 
 // My list is Jellyfin's favourites (every Jellyfin app lists them).
 async function toList(id) {
-  try { await api("/api/jf/list", {method:"POST", body:{id}}); saved.add("jf:" + id); return true; } catch (e) { return false; }
+  try { await api("/api/jf/list", {method:"POST", body:{id}}); saved.add("jf:" + id); paintFavs(); return true; } catch (e) { return false; }
 }
 
 // After an add, the buttons and badges say so. Adding an episode adds its whole show, so that page is read again
@@ -751,7 +762,10 @@ function markAdded(ctx, v, id, fromSheet) {
   if (fromSheet && $("#dlg").open) $("#dlg .acts").innerHTML = actions(v, 0, "sheet");
   document.querySelectorAll("#grid .ep .acts[data-k]").forEach(el => { if (current.videos[+el.dataset.k] === v) el.innerHTML = actions(v, +el.dataset.k); });
   document.querySelectorAll("#grid .tile[data-video]").forEach(t => {
-    if (pool[+t.dataset.video] === v && !t.querySelector(".in")) t.querySelector(".art").insertAdjacentHTML("beforeend", `<span class="in">✓ Jellyfin</span>`);
+    if (pool[+t.dataset.video] === v && !t.querySelector(".in")) {
+      t.dataset.jfkey = "jf:" + id;
+      t.querySelector(".art").insertAdjacentHTML("beforeend", `<span class="in">✓ Jellyfin</span>${favMark(t.dataset.jfkey)}`);
+    }
   });
 }
 function reloadPage() { if (current && current.node) { const y = scrollY; open(current.node, current.title, false).then(() => scrollTo(0, y)); } }
