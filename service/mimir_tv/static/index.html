@@ -28,9 +28,9 @@
   header { position:sticky; top:0; z-index:3; display:flex; align-items:center; gap:18px; padding:10px 16px;
            padding-top:calc(env(safe-area-inset-top) + 10px); background:#000; }  /* solid: iOS draws text under a backdrop blur at low resolution until a scroll */
   /* The app icon and a lowercase, rounded name: mimir-tv's own look */
-  #logo { display:inline-flex; align-items:center; gap:8px; font:700 21px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
+  #logo { display:inline-flex; align-items:center; font:700 21px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
           color:var(--ink); text-decoration:none; white-space:nowrap; }
-  #logo img { width:30px; height:30px; border-radius:8px; display:block; }
+  #logo img { width:30px; height:30px; border-radius:8px; display:block; margin-right:8px; }
   #logo span { color:#f2545b; }
   /* The TV 📺 plays on, when the house has more than one (hidden otherwise) */
   #tvpick { width:auto; max-width:40vw; padding:6px 8px; font-size:15px; }
