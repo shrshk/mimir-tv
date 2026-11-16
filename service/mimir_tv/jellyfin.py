@@ -112,6 +112,7 @@ class Jellyfin:
             "Limit": str(limit),
             "Fields": self.FIELDS,
             "IncludeItemTypes": "Movie,Series,Episode,Video,MusicVideo,Folder,TvChannel",  # channels: IPTV
+            "userId": self.user(),  # without a user Jellyfin leaves out Live TV's channels
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 

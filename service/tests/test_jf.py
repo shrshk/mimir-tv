@@ -159,7 +159,10 @@ def fake(request: httpx.Request) -> httpx.Response:
     if p == "/Items" and "SearchTerm" in q:  # loose, as Jellyfin's is: any one word of the search is enough
         words = [w for w in re.split(r"\W+", q["SearchTerm"].lower()) if len(w) > 1]
         named = lambda i: f"{i['Name']} {i.get('SeriesName', '')}".lower()  # noqa: E731
-        return httpx.Response(200, json={"Items": [i for i in ITEMS.values() if any(w in named(i) for w in words)]})
+        # Like Jellyfin: asked without a user, Live TV's channels are left out.
+        found = [i for i in ITEMS.values() if any(w in named(i) for w in words)]
+        found = [i for i in found if q.get("userId") == "u1" or i["Type"] != "TvChannel"]
+        return httpx.Response(200, json={"Items": found})
     if p == f"/Videos/{MOVIE}/stream":
         assert "Token=" in request.headers["Authorization"]
         rng = request.headers.get("Range")
