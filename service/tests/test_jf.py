@@ -775,6 +775,7 @@ def test_search_is_wholphins_a_group_per_kind_closest_names_first_and_spelling_s
         "2e" * 16: ("Into the Dark", "Series"),
         "2f" * 16: ("Dark Shows", "BoxSet"),  # a collection
         "3a" * 16: ("Telugu News", "TvChannel"),
+        "3b" * 16: ("Dark Folder", "Folder"),  # a live channel's own folder (its .strm is the Video): not a row
     }
     for id_, (name, kind) in names.items():
         monkeypatch.setitem(ITEMS, id_, item(id_, name, kind))

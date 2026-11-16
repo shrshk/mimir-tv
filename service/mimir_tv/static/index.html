@@ -1028,7 +1028,7 @@ $("#q").addEventListener("input", () => {
       // A provider's title Jellyfin's search missed joins its kind's row.
       const ROWS = [["Movie", "Movies"], ["Series", "TV shows"], ["Episode", "Episodes"], ["BoxSet", "Collections"],
         ["TvChannel", "Channels"], ["__tv", "On TV"], ["Video", "Videos"], ["MusicVideo", "Music videos"],
-        ["Playlist", "Playlists"], ["Folder", "Folders"]];
+        ["Playlist", "Playlists"]];
       for (const [kind, name] of ROWS) {
         if (kind === "__tv") { add(name, (got.tv || []).map(p => tile(p, onAir(p)))); continue; }
         add(name, mine.filter(m => m.type === kind).map(m => tile(m))

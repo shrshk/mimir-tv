@@ -107,7 +107,8 @@ class Jellyfin:
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
     # What search looks for, a Jellyfin search each (as Wholphin does: one row per kind), in the order rows show.
-    SEARCHED = ("Movie", "Series", "Episode", "BoxSet", "TvChannel", "Video", "MusicVideo", "Playlist", "Folder")
+    # Not folders (Wholphin leaves them out too): each live channel's .strm sits in a folder of its own, a twin.
+    SEARCHED = ("Movie", "Series", "Episode", "BoxSet", "TvChannel", "Video", "MusicVideo", "Playlist")
 
     def search(self, q: str, limit: int = 50) -> list[dict]:
         """Up to `limit` of each kind (SEARCHED) whose name Jellyfin matches, in parallel; a kind Jellyfin fails
