@@ -591,7 +591,7 @@ const appLink = (id, play) => !appIds ? jfLink(id)
 // play: a video; Swiftfin's links only open its page, so the Air also tells the app to play it (Jellyfin's remote
 // control, as for the TV app), once the app has come up. keepalive: the request survives the switch to Swiftfin.
 const jfOpen = (id, label, play) => appIds
-  ? `<a class="btn" href="${appLink(id, play)}"${play && !streamy() ? ` onclick="playInApp('${id}')"` : ""}>${label}</a><a class="alt" href="${jfLink(id)}" target="_blank">web ↗</a>`
+  ? `<a class="btn" href="${appLink(id, play)}"${play && !streamy() ? ` onclick="playInApp('${id}')"` : ""}>${label}</a>`
   : `<a class="btn" href="${jfLink(id)}" target="_blank">${label}</a>`;
 function playInApp(id) {
   fetch("/api/jf/phone", {method: "POST", keepalive: true, headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})}).catch(() => {});
@@ -709,13 +709,19 @@ let sheet = null;
 function videoSheet(v) {
   sheet = {jf: !!v.id, title: v.title, videos: [v]};
   const close = `<button class="icon close" onclick="$('#dlg').close()" aria-label="Close">✕</button>`;
-  $("#dlgbody").innerHTML = (v.thumb ? `<div class="banner"><img src="${v.thumb}" alt="">${close}</div>` : `<div class="grab"></div><div class="row" style="justify-content:flex-end;padding:6px 8px 0">${close}</div>`)
-    + `<div class="body"><h2>${esc(v.title)}</h2>${v.sub ? `<div class="mute">${esc(v.sub)}</div>` : ""}${v.desc ? `<p class="desc">${esc(v.desc)}</p>` : ""}
-      <div class="row acts">${actions(v, 0, "sheet")}${v.show ? `<button class="alt" data-show>Go to show ›</button>` : v.id && v.type === "Movie" && current.node !== "jfmovie:" + v.id ? `<button class="alt" data-show>Go to movie ›</button>` : ""}${googleLink(v.show_title || v.title, !!(v.show_title || v.episodic))}</div></div>`;
+  // The picture and the title go to the episode's show (or the movie's own page), when there is one to go to.
+  const to = v.show ? "show" : v.id && v.type === "Movie" && current.node !== "jfmovie:" + v.id ? "movie" : "";
+  const goes = to ? ` data-show style="cursor:pointer"` : "";  // the picture: a tap target only (the title takes the focus)
+  $("#dlgbody").innerHTML = (v.thumb ? `<div class="banner"><img src="${v.thumb}" alt=""${goes}>${close}</div>` : `<div class="grab"></div><div class="row" style="justify-content:flex-end;padding:6px 8px 0">${close}</div>`)
+    + `<div class="body"><h2${to ? `${goes} role="link" tabindex="0" aria-label="Go to ${to}: ${esc(v.title)}"` : ""}>${esc(v.title)}${to ? ` <span class="mute">›</span>` : ""}</h2>${v.sub ? `<div class="mute">${esc(v.sub)}</div>` : ""}${v.desc ? `<p class="desc">${esc(v.desc)}</p>` : ""}
+      <div class="row acts">${actions(v, 0, "sheet")}${googleLink(v.show_title || v.title, !!(v.show_title || v.episodic))}</div></div>`;
   // An episode (Next up, Continue watching): its show's page, with the seasons and the other episodes; a movie: its
   // own page.
-  const toShow = $("#dlgbody [data-show]");
-  if (toShow) toShow.onclick = () => { $("#dlg").close(); v.show ? open(v.show, v.show_title) : open("jfmovie:" + v.id, v.title); };
+  const toShow = () => { $("#dlg").close(); v.show ? open(v.show, v.show_title) : open("jfmovie:" + v.id, v.title); };
+  document.querySelectorAll("#dlgbody [data-show]").forEach(el => {
+    el.onclick = toShow;
+    el.onkeydown = e => { if (e.key === "Enter") toShow(); };
+  });
   $("#dlg").classList.add("sheet");
   $("#dlg").showModal();
 }
