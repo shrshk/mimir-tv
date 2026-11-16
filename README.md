@@ -122,6 +122,7 @@ in Wholphin does not need it.
 | `mirror_per_category`, `mirror_movies_per_category`, `mirror_episodes` | `0` (all), as shows, `10` | The whole catalogue in Jellyfin (a provider's `"mirror": true`): the newest N shows per category, the newest N movies per category (movies are cheap: set 0 for all of them), each show's latest episodes; titles outside go to the Trash unless added by hand, watched or favourited |
 | `onapps`, `onapps_per_app`, `onapps_languages` | on, `3000`, on | On my apps (your streaming apps' popular titles from TMDB) in Jellyfin: on or off, titles per app, only titles first made in your languages |
 | `wholphin_rows`, `wholphin_channels` | on, (none) | Wholphin's home rows on the TV (when languages are set), and a row per TV channel named here |
+| `live_groups` | `["Sports"]` | Live TV's channel groups besides the languages (a provider's groups by genre name no language), so sports stay in Jellyfin's Live TV |
 | `recs_avoid_genres`, `recs_languages` | (none) | Recommendations leave out these genres and keep only these original languages (`te`, `hi`, `en` …) |
 
 Secrets never go in settings.json: providers' logins are in the vault; the Jellyfin API key, TMDB token and ADB key

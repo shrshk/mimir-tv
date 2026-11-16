@@ -45,6 +45,8 @@ DEFAULTS = {
     "mirror_movies_per_category": None,  # movies' own limit (0: all; None: as mirror_per_category). Movies are cheap
     # (no page reads, one file each); shows take an hourly batch and episodes each.
     "mirror_episodes": 10,
+    # Live TV's channel groups beyond the languages (a provider's groups by genre, such as sports, name no language).
+    "live_groups": ["Sports"],
     # On my apps (onapps.py): on or off, each app's most popular titles, and only those in library_languages.
     "onapps": True,
     "onapps_per_app": 3000,

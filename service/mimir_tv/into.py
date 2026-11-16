@@ -40,6 +40,15 @@ def offered(catalogs: Catalogs) -> list[str]:
 GROUPS = re.compile(r"(?<=[?&])groups=[^&]*")
 
 
+def live_groups(languages: list[str], extra: list[str]) -> list[str]:
+    """Live TV's channel groups: the languages, then the groups that name no language (Sports), each once."""
+    out: list[str] = []
+    for g in [*languages, *extra]:
+        if g.strip() and g.strip().lower() not in {x.lower() for x in out}:
+            out.append(g.strip())
+    return out
+
+
 def set_live_groups(jf: Jellyfin, groups: list[str]) -> int:
     """Live TV's tuners that ask for channel groups (a groups= in their address, as a provider plugin's playlist
     takes it) ask for these instead; returns how many changed. Others are left alone."""
@@ -66,6 +75,7 @@ class Choice(BaseModel):
     onapps_languages: bool = True
     wholphin_rows: bool = True
     wholphin_channels: list[str] = Field(default_factory=list, max_length=50)
+    live_groups: list[str] = Field(default_factory=lambda: ["Sports"], max_length=30)  # Live TV, beyond the languages
 
 
 def preview(c: Choice, catalogs: Catalogs, jf: Jellyfin, media_root: Path, streaming) -> dict:
@@ -142,6 +152,7 @@ def router(config: Path, catalogs: Catalogs, jf: Jellyfin, media_root: Path, str
             "tmdb": streaming is not None and streaming.ready,
             "wholphin_rows": cfg["wholphin_rows"],
             "wholphin_channels": cfg["wholphin_channels"],
+            "live_groups": cfg["live_groups"],
         }
 
     @change.post("/api/settings/into/preview")
@@ -169,11 +180,12 @@ def router(config: Path, catalogs: Catalogs, jf: Jellyfin, media_root: Path, str
                 "onapps_languages": c.onapps_languages,
                 "wholphin_rows": c.wholphin_rows,
                 "wholphin_channels": [n.strip() for n in c.wholphin_channels if n.strip()],
+                "live_groups": [n.strip() for n in c.live_groups if n.strip()],
             },
             config,
         )
         try:
-            live = set_live_groups(jf, langs)
+            live = set_live_groups(jf, live_groups(langs, c.live_groups))
         except JellyfinError:
             live = None
         return {"live_tuners_changed": live}

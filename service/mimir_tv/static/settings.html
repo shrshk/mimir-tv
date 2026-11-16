@@ -402,6 +402,7 @@ function intoForm() {
     <div class="mute">Wholphin on the TV</div>
     <label class="row"><input type="checkbox" name="wholphin_rows" ${on(i.wholphin_rows)}> Lay out its home: your apps, then rows by language and kind</label>
     <label>TV channel rows (a comma between)<input type="text" name="wholphin_channels" value="${esc(i.wholphin_channels.join(", "))}" autocomplete="off"></label>
+    <label>Live TV: channel groups besides your languages (a comma between, e.g. Sports, Kids)<input type="text" name="live_groups" value="${esc((i.live_groups || []).join(", "))}" autocomplete="off"></label>
     <div class="row"><button type="button" class="ghost" id="intopreview">Preview</button></div>
     <div id="intoout"></div>`;
 }
@@ -413,7 +414,7 @@ function intoBody(f) {
     mirror: Object.fromEntries([...f.querySelectorAll("[name=mirror]")].map(x => [x.value, x.checked])),
     per_category: num("per_category", into.per_category), movies_per_category: num("movies_per_category", into.movies_per_category), episodes: num("episodes", into.episodes),
     onapps: ticked("onapps"), onapps_per_app: num("onapps_per_app", into.onapps_per_app), onapps_languages: ticked("onapps_languages"),
-    wholphin_rows: ticked("wholphin_rows"), wholphin_channels: list("wholphin_channels")};
+    wholphin_rows: ticked("wholphin_rows"), wholphin_channels: list("wholphin_channels"), live_groups: list("live_groups")};
 }
 function intoPreview(p) {
   const n = x => Number(x).toLocaleString();
