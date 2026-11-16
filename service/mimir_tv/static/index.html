@@ -43,6 +43,15 @@
   #tosend { color:var(--mute); font-size:13px; text-decoration:none; white-space:nowrap; }
   #jfl { color:var(--mute); font-size:13px; text-decoration:none; white-space:nowrap; }
   @media (min-width:700px) { .topnav { display:flex; } }
+  /* Phones: everything in the header fits on one line, with two TVs too (the TV picker shows then): the logo is
+     the icon alone, Search is in the tab bar below, and the gaps are smaller. */
+  @media (max-width:699px) {
+    header { gap:6px; padding-left:12px; padding-right:12px; }
+    #logo b, header > [data-tab="search"] { display:none; }
+    #logo img { margin-right:0; }
+    #tvpick { max-width:26vw; font-size:14px; }
+    header .icon { padding:5px; }
+  }
 
   /* Bottom tab bar (phones) */
   .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:space-around; background:#0b0b0b; border-top:1px solid #1f1f1f;
@@ -268,7 +277,7 @@ if (new URLSearchParams(location.search).has("tv")) document.documentElement.cla
 </head>
 <body>
 <header>
-  <a id="logo" href="/" aria-label="Home"><img src="/icon-192.png" alt="">mimir<span>tv</span></a>
+  <a id="logo" href="/" aria-label="Home"><img src="/icon-192.png" alt=""><b>mimir<span>tv</span></b></a>
   <nav class="topnav"><button data-tab="home" class="on">Home</button><button data-tab="list">My list</button><button data-tab="library">Library</button></nav>
   <span class="grow"></span>
   <select id="tvpick" aria-label="Which TV 📺 plays on" title="Which TV 📺 plays on" hidden></select>
