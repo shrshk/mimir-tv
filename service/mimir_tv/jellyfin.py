@@ -115,6 +115,31 @@ class Jellyfin:
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
+    def people(self, q: str, limit: int = 20) -> list[dict]:
+        """People (cast and crew) whose name matches the search, as Jellyfin's search matches: loosely."""
+        params = {"searchTerm": q, "limit": str(limit), "userId": self.user()}
+        return (self._call("GET", "/Persons", params) or {}).get("Items", [])
+
+    TITLES = "Movie,Series"
+
+    def titles_with(self, person_id: str, limit: int = 200) -> list[dict]:
+        """The movies and shows a person is in, newest first."""
+        params = {
+            "PersonIds": person_id,
+            "Recursive": "true",
+            "IncludeItemTypes": self.TITLES,
+            "SortBy": "ProductionYear,SortName",
+            "SortOrder": "Descending,Ascending",
+            "Limit": str(limit),
+            "Fields": self.FIELDS,
+            "userId": self.user(),
+        }
+        return (self._call("GET", "/Items", params) or {}).get("Items", [])
+
+    def count_with(self, person_id: str) -> int:
+        params = {"PersonIds": person_id, "Recursive": "true", "IncludeItemTypes": self.TITLES, "Limit": "0"}
+        return (self._call("GET", "/Items", params | {"userId": self.user()}) or {}).get("TotalRecordCount", 0)
+
     def item(self, item_id: str) -> dict:
         items = (self._call("GET", "/Items", {"Ids": item_id, "Fields": self.FIELDS}) or {}).get("Items", [])
         if not items:

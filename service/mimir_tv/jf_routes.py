@@ -172,6 +172,30 @@ def router(
         found = guard(jf.search, q)
         return [card(i) for i in found if i.get("Type") in PLAYABLE | {"Series", "Folder", "TvChannel"} and named(q, i)]
 
+    @api.get("/api/jf/people")
+    def people(q: str = Query(max_length=200)):
+        """Cast and crew whose name has every word of the search (as Wholphin's search finds them), with how many of
+        their titles the library has; people with none are left out, most titles first."""
+        if not any(len(w) > 1 for w in words(q)):
+            return []
+        found = [p for p in guard(jf.people, q) if named(q, p)][:8]
+        out = [
+            {"id": p["Id"], "name": p["Name"], "thumb": card(p)["thumb"], "count": guard(jf.count_with, p["Id"])}
+            for p in found
+        ]
+        return sorted((p for p in out if p["count"]), key=lambda p: -p["count"])
+
+    @api.get("/api/jf/person/{id}")
+    def person(id: str = Path(pattern=ID)):
+        """A person's page: their movies and shows in the library, newest first."""
+        p = guard(jf.item, id)
+        return {
+            "id": id,
+            "name": p.get("Name", ""),
+            "thumb": card(p)["thumb"],
+            "items": [card(i) for i in guard(jf.titles_with, id)],
+        }
+
     @api.get("/api/jf/title")
     def title_page(id: str = Query(pattern=ID)):
         """A movie's page: its details, and the library's titles like it (empty when Jellyfin cannot say)."""
@@ -189,6 +213,12 @@ def router(
             "genres": i.get("Genres") or [],
             "cast": [p["Name"] for p in people if p.get("Type") == "Actor"][:8],
             "directors": [p["Name"] for p in people if p.get("Type") == "Director"],
+            # Each opens its own page (/api/jf/person/<id>): the cast first, then the directors.
+            "people": [
+                {"id": p.get("Id") or "", "name": p["Name"], "role": p["Type"]}
+                for p in [x for x in people if x.get("Type") == "Actor"][:8]
+                + [x for x in people if x.get("Type") == "Director"]
+            ],
             "backdrop": f"/jf/Items/{id}/Images/Backdrop?maxWidth=1280&quality=85"
             if i.get("BackdropImageTags")
             else "",

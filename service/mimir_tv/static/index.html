@@ -97,6 +97,14 @@
   .chips.line { grid-column:1/-1; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; margin:4px -16px 6px; padding:0 16px; }
   .chips.line::-webkit-scrollbar { display:none; }
   .chips.line .chip { flex:none; white-space:nowrap; }
+  /* People in search (cast and crew, as in Wholphin): a round photo, the name, how many titles here */
+  .people { grid-column:1/-1; display:flex; gap:14px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none; }
+  .people::-webkit-scrollbar { display:none; }
+  .person { flex:none; width:84px; border:0; background:none; color:var(--ink); padding:0; text-align:center; font-size:13px; line-height:1.25; }
+  .person .face { width:72px; height:72px; margin:0 auto 6px; border-radius:50%; background:#2a2a2a center/cover; display:flex; align-items:center;
+                  justify-content:center; font-size:26px; font-weight:700; color:var(--mute); }
+  .person small { display:block; color:var(--mute); }
+  .castlink { border:0; background:none; color:inherit; padding:0; font:inherit; text-decoration:underline; text-decoration-color:#666; text-underline-offset:3px; }
   .chip small { opacity:.6; margin-left:4px; }
   @media (min-width:700px) { .chips.line { margin:4px -32px 6px; padding:0 32px; } }
   .recbar { margin:4px 0 6px; } .recsel { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; } .recsel select { width:auto; max-width:46%; }
@@ -825,6 +833,7 @@ async function open(node, title, push = true) {
     if (node.startsWith("__sections:")) return sections(node.slice(11));
     if (node === "__list") return myList();
     if (node.startsWith("jfmovie:")) return moviePage(node.slice(8));
+    if (node.startsWith("jfperson:")) return personPage(node.slice(9));
     const jfNode = node.startsWith("jf:");
     const d = jfNode ? await api("/api/jf/browse?id=" + enc(node.slice(3))) : await api(P(pidOf(node)) + "/browse?node=" + enc(node));
     const folders = d.items.filter(i => i.kind === "folder"), videos = d.items.filter(i => i.kind === "video");
@@ -845,6 +854,20 @@ async function open(node, title, push = true) {
 }
 
 // A movie's own page: its artwork, facts, play buttons and My list, who is in it, and the library's titles like it.
+// A person (cast or crew): a round photo or their initial; tapping opens their page.
+const personBtn = p => `<button class="person" data-person="${esc(p.id)}" data-name="${esc(p.name)}"><span class="face"${p.thumb ? ` style="background-image:url('${p.thumb}')"` : ""}>${p.thumb ? "" : esc((p.name || "?")[0])}</span>${esc(p.name)}${p.count ? `<small>${p.count} title${p.count > 1 ? "s" : ""}</small>` : ""}</button>`;
+function bindPeople() {
+  document.querySelectorAll("#grid [data-person]").forEach(b => b.onclick = () => open("jfperson:" + b.dataset.person, b.dataset.name));
+}
+async function personPage(id) {
+  const p = await api("/api/jf/person/" + enc(id));
+  pool = [];
+  current = {node: "jfperson:" + id, title: p.name, items: p.items, videos: [], jf: true};
+  $("#grid").innerHTML = `<div class="people">${personBtn({id: p.id, name: "", thumb: p.thumb})}<div style="align-self:center"><h2 style="margin:0">${esc(p.name)}</h2><div class="mute">${p.items.length} title${p.items.length === 1 ? "" : "s"} in Jellyfin</div></div></div>`
+    + (p.items.length ? p.items.map(i => tile(i)).join("") : `<div class="full mute">Nothing with ${esc(p.name)} in Jellyfin yet.</div>`);
+  bindTiles(true);
+}
+
 async function moviePage(id) {
   const m = await api("/api/jf/title?id=" + enc(id));
   pool = [];
@@ -855,11 +878,13 @@ async function moviePage(id) {
   let html = `<div class="hero">${art ? `<img src="${art}" alt="">` : ""}<div class="in"><h2>${esc(m.title)}</h2>${facts ? `<div class="s">${esc(facts)}</div>` : ""}
     <div class="row big">${playActions(m, 0)}${listBtn({jf: m.id, title: m.title})}</div></div></div>`;
   if (m.desc) html += `<div class="showbar"><div class="mute">${esc(m.desc)}</div></div>`;
-  const people = [m.directors.length ? `Director: ${m.directors.join(", ")}` : "", m.cast.length ? `Cast: ${m.cast.join(", ")}` : ""].filter(Boolean);
-  if (people.length) html += `<div class="full mute">${people.map(esc).join("<br>")}</div>`;
+  // Each name opens that person's page (their titles here), as in Wholphin.
+  const named = role => (m.people || []).filter(p => p.role === role).map(p => p.id ? `<button class="castlink" data-person="${esc(p.id)}" data-name="${esc(p.name)}">${esc(p.name)}</button>` : esc(p.name)).join(", ");
+  const people = [m.directors.length ? `Director: ${named("Director")}` : "", m.cast.length ? `Cast: ${named("Actor")}` : ""].filter(Boolean);
+  if (people.length) html += `<div class="full mute">${people.join("<br>")}</div>`;
   if (m.more.length) html += `<div class="rowhead"><h3>More like this</h3></div><div class="strip">${m.more.map(i => tile(i)).join("")}</div>`;
   $("#grid").innerHTML = html;
-  bindTiles(true);
+  bindTiles(true); bindPeople();
 }
 
 // Play here tells Jellyfin what is watched (through the Air): where it was left and what was finished, so Continue
@@ -966,7 +991,7 @@ $("#q").addEventListener("input", () => {
     $("#grid").innerHTML = `<div class="skel">${"<i></i>".repeat(8)}</div>`;
     // Results show as each source answers: your videos and your apps in a moment, a provider's own search in
     // seconds. null: still searching that source.
-    const got = {mine: null, streams: null};
+    const got = {mine: null, streams: null, people: null};
     for (const p of provs()) got["p:" + p.id] = null;
     let pick = "";  // the group chosen in the filter line; "" is all of them
     const draw = () => {
@@ -997,16 +1022,19 @@ $("#q").addEventListener("input", () => {
         const chip = (name, n) => `<button class="chip${name === pick ? " on" : ""}" data-sec="${esc(name)}">${esc(name || "All")}<small>${n}</small></button>`;
         html += `<div class="chips line">${chip("", [...sections.values()].flat().length)}${[...sections].map(([name, t]) => chip(name, t.length)).join("")}</div>`;
       }
+      // People first (cast and crew whose name it is), as in Wholphin's search: each opens their titles here.
+      if (!pick && (got.people || []).length) html = `<div class="people">${got.people.map(personBtn).join("")}</div>` + html;
       html += (pick ? sections.get(pick) : [...sections.values()].flat()).join("");
       const still = provs().filter(p => got["p:" + p.id] === null).map(p => p.name);
       if (html && waiting) html += `<div class="full mute" style="margin-top:12px">Still searching${still.length ? " " + esc(still.join(", ")) : ""}…</div>`;
       $("#grid").innerHTML = html || (waiting ? `<div class="skel">${"<i></i>".repeat(8)}</div>` : `<div class="full mute">Nothing matches “${esc(q)}”.</div>`);
-      crumbs = []; bindTiles(true);
+      crumbs = []; bindTiles(true); bindPeople();
       $("#grid").querySelectorAll(".chip[data-sec]").forEach(b => b.onclick = () => { pick = b.dataset.sec; draw(); });
     };
     const arrive = (key, p) => p.catch(() => []).then(v => { got[key] = v; draw(); });
     arrive("mine", api("/api/jf/search?q=" + enc(q)));
     arrive("streams", api("/api/streaming/search?q=" + enc(q)));
+    arrive("people", api("/api/jf/people?q=" + enc(q)));
     for (const p of provs()) arrive("p:" + p.id, api(P(p.id) + "/search?q=" + enc(q)));
   }, 250);
 });

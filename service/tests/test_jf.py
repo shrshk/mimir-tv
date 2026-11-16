@@ -40,6 +40,12 @@ def item(id_, name, type_, container="mp4", video="h264", audio="aac", **kw):
 
 
 SHOW, EP1, EP2 = "3" * 32, "1" * 32, "2" * 32
+PRABHAS, DEEPIKA, NAMESAKE = "f1" * 16, "f2" * 16, "f3" * 16  # people: actors with titles, and one with none here
+PERSONS = {
+    PRABHAS: {"Id": PRABHAS, "Name": "Prabhas", "Type": "Person", "ImageTags": {"Primary": "p"}},
+    DEEPIKA: {"Id": DEEPIKA, "Name": "Deepika Padukone", "Type": "Person", "ImageTags": {}},
+    NAMESAKE: {"Id": NAMESAKE, "Name": "Prabhas Sreenu", "Type": "Person", "ImageTags": {}},
+}
 FILM, LIKE_IT = "4" * 32, "5" * 32
 ITEMS = {
     MOVIE: item(MOVIE, "Wedding Film 4K", "Video"),
@@ -57,14 +63,16 @@ ITEMS = {
         CommunityRating=7.46,
         Genres=["Science Fiction", "Action"],
         People=[
-            {"Name": "Prabhas", "Type": "Actor"},
-            {"Name": "Deepika Padukone", "Type": "Actor"},
+            {"Name": "Prabhas", "Type": "Actor", "Id": PRABHAS},
+            {"Name": "Deepika Padukone", "Type": "Actor", "Id": DEEPIKA},
             {"Name": "Nag Ashwin", "Type": "Director"},
             {"Name": "C. Ashwini Dutt", "Type": "Producer"},
         ],
         BackdropImageTags=["b"],
     ),
-    LIKE_IT: item(LIKE_IT, "Salaar", "Movie", ProductionYear=2023),
+    LIKE_IT: item(
+        LIKE_IT, "Salaar", "Movie", ProductionYear=2023, People=[{"Name": "Prabhas", "Type": "Actor", "Id": PRABHAS}]
+    ),
 }
 
 
@@ -119,8 +127,24 @@ def fake(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Items": [ITEMS[LIKE_IT], ITEMS["9" * 32]]})  # a channel is no movie
     if p.endswith("/Similar"):
         return httpx.Response(500, text="boom")
+    if p == "/Persons":  # loose, as Jellyfin's search is: any one word
+        assert q["userId"] == "u1"
+        words = q["searchTerm"].lower().split()
+        return httpx.Response(
+            200, json={"Items": [x for x in PERSONS.values() if any(w in x["Name"].lower() for w in words)]}
+        )
+    if p == "/Items" and "PersonIds" in q:
+        kinds = q["IncludeItemTypes"].split(",")
+        hits = [
+            i
+            for i in ITEMS.values()
+            if i["Type"] in kinds and any(x.get("Id") == q["PersonIds"] for x in i.get("People") or [])
+        ]
+        hits.sort(key=lambda i: -(i.get("ProductionYear") or 0))
+        return httpx.Response(200, json={"Items": [] if q.get("Limit") == "0" else hits, "TotalRecordCount": len(hits)})
     if p == "/Items" and "Ids" in q:
-        return httpx.Response(200, json={"Items": [ITEMS[q["Ids"]]] if q["Ids"] in ITEMS else []})
+        found = ITEMS | PERSONS  # Jellyfin gives a person by id like any item
+        return httpx.Response(200, json={"Items": [found[q["Ids"]]] if q["Ids"] in found else []})
     if p == "/Items" and q.get("SortBy") == "DateCreated":  # a show's newest episodes
         return httpx.Response(200, json={"Items": [e for e in EPISODES if e.get("SeriesId") == q.get("ParentId")]})
     if p == "/Items" and "ParentId" in q:
@@ -600,6 +624,21 @@ def test_play_here_goes_on_to_the_next_episode(tmp_path):
     assert c.get(f"/api/jf/next/{MOVIE}").json() == {}  # not an episode
 
 
+def test_search_finds_people_by_name_and_a_persons_page_lists_their_titles(tmp_path):
+    _, c, _ = setup(tmp_path)
+    # Every word of the search is in the name; people with nothing in the library are left out; most titles first.
+    people = c.get("/api/jf/people", params={"q": "prabhas"}).json()
+    assert [(x["id"], x["name"], x["count"]) for x in people] == [(PRABHAS, "Prabhas", 2)]
+    assert people[0]["thumb"] == f"/jf/Items/{PRABHAS}/Images/Primary?maxHeight=480&quality=85"
+    assert [x["name"] for x in c.get("/api/jf/people", params={"q": "Deepika"}).json()] == ["Deepika Padukone"]
+    assert c.get("/api/jf/people", params={"q": "prabhas padukone"}).json() == []  # Jellyfin's loose match: not one
+    assert c.get("/api/jf/people", params={"q": "x"}).json() == []  # too short to mean a name
+    page = c.get(f"/api/jf/person/{PRABHAS}").json()
+    assert page["name"] == "Prabhas" and page["thumb"].startswith(f"/jf/Items/{PRABHAS}/")
+    assert [i["title"] for i in page["items"]] == ["Kalki 2898 AD", "Salaar"]  # newest first
+    assert c.get("/api/jf/person/../Users").status_code == 404
+
+
 def test_a_movie_page_has_its_details_and_the_librarys_titles_like_it(tmp_path):
     _, c, _ = setup(tmp_path)
     page = c.get("/api/jf/title", params={"id": FILM}).json()
@@ -612,11 +651,17 @@ def test_a_movie_page_has_its_details_and_the_librarys_titles_like_it(tmp_path):
     )
     assert page["genres"] == ["Science Fiction", "Action"] and page["directors"] == ["Nag Ashwin"]
     assert page["cast"] == ["Prabhas", "Deepika Padukone"]  # actors only: the producer is not cast
+    # Each named person opens their own page (their titles here), as in Wholphin.
+    assert page["people"] == [
+        {"id": PRABHAS, "name": "Prabhas", "role": "Actor"},
+        {"id": DEEPIKA, "name": "Deepika Padukone", "role": "Actor"},
+        {"id": "", "name": "Nag Ashwin", "role": "Director"},
+    ]
     assert page["backdrop"] == f"/jf/Items/{FILM}/Images/Backdrop?maxWidth=1280&quality=85"
     assert [m["title"] for m in page["more"]] == ["Salaar"]
     # Jellyfin failing the titles like it still shows the page; an id that is not one is refused before Jellyfin.
     other = c.get("/api/jf/title", params={"id": LIKE_IT}).json()
-    assert other["more"] == [] and other["backdrop"] == "" and other["cast"] == []
+    assert other["more"] == [] and other["backdrop"] == "" and other["cast"] == ["Prabhas"]
     assert c.get("/api/jf/title", params={"id": "../Users"}).status_code == 422
     assert c.get("/api/jf/title", params={"id": "6" * 32}).status_code in (404, 502)
 
