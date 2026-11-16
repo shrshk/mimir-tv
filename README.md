@@ -16,12 +16,14 @@ the phone. A streaming title opens in its own app.
 | Where | App | For |
 |---|---|---|
 | TV (Android TV, Fire TV) | [Wholphin](https://github.com/damontecres/Wholphin) | Watching: home rows by app and language, collections, Live TV, My list, Continue watching |
-| Phone | mimir-tv (Home Screen app) | Finding a title anywhere and adding it to Jellyfin or My list; 📺 TV to start it on a TV |
+| Phone | mimir-tv (Home Screen app) | Finding a title anywhere and adding it to Jellyfin or My list; 📺 TV to start it on a TV; ✏️ TV to send a doodle or photo to the TV |
+| TV | mimir-tv TV app | Shows those doodles and photos over whatever is on screen |
 | Phone | Streamyfin or Swiftfin | Watching on the phone |
 | The Mac | Jellyfin and mimir-tv | The library, the jobs that fill it, the resolver that plays a provider's links |
 
-The TV app ([android/](android/), `?tv=1`) puts mimir-tv's own page on the TV. It is optional: Wholphin does most of
-what a TV needs, because mimir-tv puts its rows and titles in Jellyfin.
+The TV app ([android/](android/)) shows a doodle or photo from the phone over whatever is on the TV, for a few
+seconds. Install it on each TV that should get them. It can also show mimir-tv's own page on the TV (`?tv=1`), but
+Wholphin does that job better, because mimir-tv puts its rows and titles in Jellyfin.
 
 Providers are optional: live TV from IPTV (an M3U playlist or an Xtream Codes login, played by Jellyfin's Live TV),
 and providers with a catalogue of their own through a provider plugin (see below). Kodi and the TV add ways to play. Your streaming apps (Netflix, Prime Video, Peacock …) are a filter: search counts only the ones
@@ -68,7 +70,7 @@ passwords.
 | `/setup` in the browser | What this Mac needs (Homebrew, uv, Jellyfin, Tailscale), with an Install button that works only on the Mac itself and asks first; then setup one step at a time |
 | `/settings` in the browser | What works (✓/✗ with the fix) and every setting: Jellyfin, providers, your apps, TVs (pair each), Kodi, phones |
 | `scripts/restore-mac.sh <backup>` | Puts a nightly backup back (asks first; keeps what is there as *.before-restore) |
-| `/tv/app.apk` | The optional TV app ([android/](android/) in this repo) for the TV's Downloader app; Settings → TV app has the steps |
+| `/tv/app.apk` | The TV app ([android/](android/) in this repo, for doodles and photos on the TV) for the TV's Downloader app; Settings → TV app has the steps |
 | `scripts/install-mac.sh` | Install or update the app (`--remove` to remove it; files and settings stay) |
 | `mimir-tv-setup <tv>` | Another TV set up like the first (below) |
 

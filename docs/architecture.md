@@ -18,7 +18,7 @@ flowchart LR
   end
   subgraph tv["Android TV or Fire TV (no Tailscale)"]
     jftv["Wholphin<br/>(Jellyfin app)"]
-    tvapp["mimir-tv TV app<br/>(optional, ?tv=1)"]
+    tvapp["mimir-tv TV app<br/>(doodles and photos; ?tv=1)"]
     kodi["Kodi (optional)"]
     apps_tv["Netflix, Peacock, Prime Video …"]
   end
@@ -195,4 +195,4 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 | [mcp_server.py](../service/mimir_tv/mcp_server.py) | `POST /mcp` for an assistant (OpenClaw): tools that call the app's own routes in-process; bearer token, tailnet only |
 | [jobs.py](../service/mimir_tv/jobs.py) | The scheduled jobs and the jobs page routes |
 | [static/index.html](../service/mimir_tv/static/index.html) | The whole page: phone, Mac and TV mode (`?tv=1`, remote navigation) |
-| [android/](../android/) | The optional TV app: a WebView on mimir-tv's `?tv=1`, the address typed on first launch; mimir-tv serves its APK at `/tv/app.apk` |
+| [android/](../android/) | The TV app (the doodle and photo overlay): a WebView on mimir-tv's `?tv=1`, the address typed on first launch; mimir-tv serves its APK at `/tv/app.apk` |
