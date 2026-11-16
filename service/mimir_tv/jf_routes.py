@@ -172,6 +172,35 @@ def router(
         found = guard(jf.search, q)
         return [card(i) for i in found if i.get("Type") in PLAYABLE | {"Series", "Folder", "TvChannel"} and named(q, i)]
 
+    @api.get("/api/jf/programmes")
+    def programmes(q: str = Query(max_length=200)):
+        """What is on TV now or later today with every word of the search in its name (the guide: Jellyfin's Live
+        TV), on now first, then by start. Each card is its channel's, which plays it."""
+        if not any(len(w) > 1 for w in words(q)):
+            return []
+        now = datetime.now(UTC).isoformat()
+        out = []
+        for p in guard(jf.programmes, q):
+            if not (p.get("ChannelId") and named(q, p)):
+                continue
+            start, end = p.get("StartDate") or "", p.get("EndDate") or ""
+            out.append(
+                {
+                    "id": p["ChannelId"],
+                    "node": f"jf:{p['ChannelId']}",
+                    "kind": "video",
+                    "type": "TvChannel",
+                    "title": p.get("Name", ""),
+                    "channel": p.get("ChannelName") or "",
+                    "desc": p.get("Overview") or "",
+                    "start": start,
+                    "end": end,
+                    "on_now": start[:19] <= now[:19] < end[:19],
+                    "thumb": f"/jf/Items/{p['ChannelId']}/Images/Primary?maxHeight=480&quality=85",
+                }
+            )
+        return sorted(out, key=lambda x: (not x["on_now"], x["start"]))
+
     @api.get("/api/jf/people")
     def people(q: str = Query(max_length=200)):
         """Cast and crew whose name has every word of the search (as Wholphin's search finds them), with how many of

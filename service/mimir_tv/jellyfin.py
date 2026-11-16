@@ -116,6 +116,22 @@ class Jellyfin:
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
+    def programmes(self, q: str, hours: int = 24, limit: int = 200) -> list[dict]:
+        """The TV guide's programmes matching the search (loosely) that are on now or start within `hours`."""
+        stamp = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))  # noqa: E731
+        params = {
+            "userId": self.user(),
+            "SearchTerm": q,
+            "IncludeItemTypes": "LiveTvProgram",
+            "Recursive": "true",
+            "MinEndDate": stamp(time.time()),
+            "MaxStartDate": stamp(time.time() + hours * 3600),
+            "SortBy": "StartDate",
+            "Limit": str(limit),
+            "Fields": "ChannelInfo,Overview",
+        }
+        return (self._call("GET", "/Items", params) or {}).get("Items", [])
+
     def people(self, q: str, limit: int = 20) -> list[dict]:
         """People (cast and crew) whose name matches the search, as Jellyfin's search matches: loosely."""
         params = {"searchTerm": q, "limit": str(limit), "userId": self.user()}

@@ -83,6 +83,7 @@ PLAYED: list[tuple] = []
 TV_APP = {"Id": "tv", "Client": "Jellyfin Android TV", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
 USER_DATA: dict[str, dict] = {}  # the admin's data per item: position, played, favourite
 REPORTS: list[tuple] = []  # session reports: (event, body)
+PROGRAMMES: list[dict] = []  # the TV guide's programmes (Jellyfin's Live TV, from an XMLTV source)
 PLAYLISTS: dict[str, dict] = {}  # the user's playlists: id -> {"Name", "items": [item ids, in order]}
 LIVE_ROOT = "/media/tv1-live"  # a provider's live channels (.strm files)
 PHONE_APP = {"Id": "phone", "Client": "Jellyfin iOS", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
@@ -127,6 +128,12 @@ def fake(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Items": [ITEMS[LIKE_IT], ITEMS["9" * 32]]})  # a channel is no movie
     if p.endswith("/Similar"):
         return httpx.Response(500, text="boom")
+    if p == "/Items" and q.get("IncludeItemTypes") == "LiveTvProgram":  # loose too: any word, in the name
+        assert q["userId"] == "u1" and q["MinEndDate"] and q["MaxStartDate"]
+        words = q["SearchTerm"].lower().split()
+        hits = [x for x in PROGRAMMES if any(w in x["Name"].lower() for w in words)]
+        hits = [x for x in hits if x["EndDate"] > q["MinEndDate"] and x["StartDate"] < q["MaxStartDate"]]
+        return httpx.Response(200, json={"Items": hits})
     if p == "/Persons":  # loose, as Jellyfin's search is: any one word
         assert q["userId"] == "u1"
         words = q["searchTerm"].lower().split()
@@ -691,3 +698,46 @@ def test_whats_playing_on_the_tv_includes_wholphin_which_takes_no_remote_control
     assert (now["show"], now["episode"], now["minute"]) == ("Dark", "S01E03", 12)
     monkeypatch.setattr("tests.test_jf.SESSIONS", [playing | {"NowPlayingItem": None}])
     assert c.get("/api/jf/now").json() == {}
+
+
+def test_search_finds_whats_on_tv_now_and_later_today_from_the_guide(tmp_path, monkeypatch):
+    def at(minutes):
+        return time.strftime("%Y-%m-%dT%H:%M:%S.0000000Z", time.gmtime(time.time() + minutes * 60))
+
+    def show(name, start, end, channel="ch1", channel_name="Sky Sports Football"):
+        return {
+            "Id": f"p-{name}-{start}",
+            "Name": name,
+            "Type": "Program",
+            "StartDate": at(start),
+            "EndDate": at(end),
+            "ChannelId": channel,
+            "ChannelName": channel_name,
+            "ChannelPrimaryImageTag": "c",
+        }
+
+    monkeypatch.setattr(
+        "tests.test_jf.PROGRAMMES",
+        [
+            show("Premier League: Arsenal v Chelsea", -30, 75),  # on now
+            show("Arsenal Highlights", 180, 210, "ch2", "Arsenal TV"),  # later today
+            show("Arsenal Classics", -300, -240),  # over: left out
+            show("Arsenal Weekly", 60 * 30, 60 * 31),  # past tomorrow: left out
+            show("Chelsea: The Story", 30, 60),  # Jellyfin's loose match on "arsenal chelsea": not both words
+        ],
+    )
+    _, c, _ = setup(tmp_path)
+    found = c.get("/api/jf/programmes", params={"q": "arsenal"}).json()
+    assert [(x["title"], x["channel"], x["on_now"]) for x in found] == [
+        ("Premier League: Arsenal v Chelsea", "Sky Sports Football", True),
+        ("Arsenal Highlights", "Arsenal TV", False),
+    ]
+    # Each plays its channel: the card is the channel's (its id, its logo), with the programme's name and times.
+    first = found[0]
+    assert (first["id"], first["type"], first["kind"]) == ("ch1", "TvChannel", "video")
+    assert first["thumb"] == "/jf/Items/ch1/Images/Primary?maxHeight=480&quality=85"
+    assert first["start"] < first["end"]
+    assert [x["title"] for x in c.get("/api/jf/programmes", params={"q": "arsenal chelsea"}).json()] == [
+        "Premier League: Arsenal v Chelsea"
+    ]
+    assert c.get("/api/jf/programmes", params={"q": "x"}).json() == []

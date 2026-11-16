@@ -854,6 +854,15 @@ async function open(node, title, push = true) {
 }
 
 // A movie's own page: its artwork, facts, play buttons and My list, who is in it, and the library's titles like it.
+// A guide programme's line: "Now · Sky Sports · until 21:30", "Today 20:00 · Star Maa", "Tomorrow 06:00 · …".
+function onAir(p) {
+  const hm = d => d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
+  const start = new Date(p.start), end = new Date(p.end), today = new Date().toDateString();
+  if (p.on_now) return `Now · ${p.channel} · until ${hm(end)}`;
+  const day = start.toDateString() === today ? "Today" : "Tomorrow";
+  return `${day} ${hm(start)} · ${p.channel}`;
+}
+
 // A person (cast or crew): a round photo or their initial; tapping opens their page.
 const personBtn = p => `<button class="person" data-person="${esc(p.id)}" data-name="${esc(p.name)}"><span class="face"${p.thumb ? ` style="background-image:url('${p.thumb}')"` : ""}>${p.thumb ? "" : esc((p.name || "?")[0])}</span>${esc(p.name)}${p.count ? `<small>${p.count} title${p.count > 1 ? "s" : ""}</small>` : ""}</button>`;
 function bindPeople() {
@@ -991,7 +1000,7 @@ $("#q").addEventListener("input", () => {
     $("#grid").innerHTML = `<div class="skel">${"<i></i>".repeat(8)}</div>`;
     // Results show as each source answers: your videos and your apps in a moment, a provider's own search in
     // seconds. null: still searching that source.
-    const got = {mine: null, streams: null, people: null};
+    const got = {mine: null, streams: null, people: null, tv: null};
     for (const p of provs()) got["p:" + p.id] = null;
     let pick = "";  // the group chosen in the filter line; "" is all of them
     const draw = () => {
@@ -1014,6 +1023,8 @@ $("#q").addEventListener("input", () => {
       // Each poster says its section too: the same show is often in several, with different seasons.
       const sections = new Map();
       const add = (name, tiles) => tiles.length && sections.set(name, (sections.get(name) || []).concat(tiles));
+      // The TV guide first: what is on now (or later today) under that name, each card playing its channel.
+      add("On TV", (got.tv || []).map(p => tile(p, onAir(p))));
       add("In Jellyfin", mine.map(m => tile(m)).concat(late.map(i => tile(i, i.sub))));
       add("On your apps", elsewhere.map(w => tile(w, w.year)));
       for (const g of groups) add(g.section, g.items.map(i => tile({...i, src: g.src}, [g.section, i.sub].filter(Boolean).join(" · "))));
@@ -1035,6 +1046,7 @@ $("#q").addEventListener("input", () => {
     arrive("mine", api("/api/jf/search?q=" + enc(q)));
     arrive("streams", api("/api/streaming/search?q=" + enc(q)));
     arrive("people", api("/api/jf/people?q=" + enc(q)));
+    arrive("tv", api("/api/jf/programmes?q=" + enc(q)));
     for (const p of provs()) arrive("p:" + p.id, api(P(p.id) + "/search?q=" + enc(q)));
   }, 250);
 });

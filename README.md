@@ -164,7 +164,9 @@ are files readable by you only.
   titles stay.
 - **Search**: one box over Jellyfin, each provider and your streaming apps. Jellyfin's results keep only titles
   with every word you typed. People come first, as in Wholphin: cast and crew with that name, each opening a page of
-  their titles in Jellyfin; a title's page names its cast and director the same way.
+  their titles in Jellyfin; a title's page names its cast and director the same way. With a TV guide in Jellyfin's
+  Live TV (an XMLTV source, such as a provider plugin's), "On TV" lists what is on now or later today under that name
+  ("arsenal", "cricket"), each card playing its channel.
 - **Library**: libraries, folders (everything under a folder is included), excluded subfolders (an empty
   `.ignore` file, which Jellyfin skips), single videos (linked into the library's picks folder), and live scan status.
 - **Jobs and backups**: `/jobs` lists the scheduled jobs (nightly backup and its off-site copy, new episodes, the
