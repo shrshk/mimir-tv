@@ -137,6 +137,9 @@ class FakeCatalog(Catalog):
     def section_of(self, url):
         return "Shows"
 
+    def page_key(self, url):  # a page's link may carry its thumbnail, which changes; the page does not
+        return url.split("?thumb=")[0]
+
     def status(self):
         return "rebuilding the index"
 
@@ -404,6 +407,14 @@ def test_a_show_becomes_jellyfin_episodes_and_new_ones_follow(cat, tmp_path):
     # The same name from another section gets its own folder, labelled with where it came from.
     assert show_folder(root, "Dark", f"{SITE}/other/dark", cat) == "Dark (Shows)"
     assert show_folder(root, "DARK", SHOW, cat) == "Dark"  # adding again keeps its folder
+    # A show the whole catalogue wrote keeps its folder too: another show of that name added by hand (the same
+    # title in another language) gets its own; the mirrored show itself, added by hand, keeps the mirror's folder.
+    mirror.save(root, {f"{SITE}/hindi/bigg-boss": {"name": "Bigg Boss", "at": 0}})
+    assert show_folder(root, "Bigg Boss", f"{SITE}/telugu/bigg-boss", cat) == "Bigg Boss (Shows)"
+    assert show_folder(root, "Bigg Boss", f"{SITE}/hindi/bigg-boss", cat) == "Bigg Boss"
+    # The same page under a link with another thumbnail is the same show: its folder, not a new one.
+    mirror.save(root, mirror.mirrored(root) | {f"{SITE}/telugu/bigg-boss?thumb=1": {"name": "Bigg Boss (2)", "at": 0}})
+    assert show_folder(root, "Bigg Boss", f"{SITE}/telugu/bigg-boss?thumb=2", cat) == "Bigg Boss (2)"
 
 
 def test_files_already_there_are_left_alone(tmp_path):
@@ -648,13 +659,13 @@ def test_the_whole_catalogue_goes_into_jellyfin_a_batch_of_shows_at_a_time(home,
     settings.save({"providers": [{"id": "tv1", "name": "My TV", "kind": "fakecat", "mirror": True}]}, home.config)
     cat = home.get("tv1")[1]  # a changed settings entry makes the provider again
 
-    # A show added by hand keeps its own hourly check and is not written again; another show also called "Dark"
-    # gets a folder of its own.
+    # A show added by hand keeps its own hourly check and is not written again, also when it was added under a link
+    # with another thumbnail (the same page); another show also called "Dark" gets a folder of its own.
     cat.pages[SECTIONS["Shows"]].append(folder("DARK", f"{SITE}/remake"))
     cat.pages[f"{SITE}/remake"] = [video("Episode 1", "https://files.example/remake/e1.mp4")]
     cat.pages[SECTIONS["Shows"]].append(folder("Mine", f"{SITE}/mine"))
     cat.pages[f"{SITE}/mine"] = [video("Episode 1", "https://files.example/mine/e1.mp4")]
-    follow(shows_root, "Mine", f"{SITE}/mine")
+    follow(shows_root, "Mine", f"{SITE}/mine?thumb=old")
 
     # A batch of two: the movie, Dark, and Other (its page is down: tried again later); the remake waits.
     t = time.time()

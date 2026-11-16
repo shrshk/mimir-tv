@@ -33,9 +33,8 @@ import httpx
 
 from mimir_tv import badges
 from mimir_tv.catalog import Catalog, CatalogError
-from mimir_tv.strm import added, follow, followed, safe, write_movie, write_show
+from mimir_tv.strm import MIRRORED, added, follow, followed, safe, write_movie, write_show
 
-MIRRORED = ".mirrored.json"
 SHOWS_PER_RUN = 100  # page reads stay polite: the first pass over ~2,000 shows takes about a day
 EPISODES_KEPT = 10  # a mirrored show's latest episodes; favourite it in Jellyfin for all of them
 REWRITE_AFTER = 7 * 24 * 3600
@@ -128,12 +127,13 @@ def mirror(
 
     shows = mirrored(shows_root)
     by_hand = {url: name for name, url in followed(shows_root).items()}
+    hand_keys = {cat.page_key(url) for url in by_hand}  # the same show under another link is still added by hand
     taken = {name.lower(): url for url, name in by_hand.items()} | {s["name"].lower(): url for url, s in shows.items()}
     due = [
         s
         for s in listed
         if s["kind"] == "show"
-        and s["url"] not in by_hand
+        and cat.page_key(s["url"]) not in hand_keys
         and (s["url"] not in shows or now - shows[s["url"]]["at"] > REWRITE_AFTER)
     ]
     due.sort(key=lambda s: shows.get(s["url"], {}).get("at", 0))  # never written first, then the oldest
@@ -327,9 +327,11 @@ def follow_favourites(shows_root: Path, favourite_paths: list[str]) -> list[str]
 
 def left(cat: Catalog, shows_root: Path, languages: list[str] | None = None, per_category: int = 0) -> int:
     """How many wanted shows are still waiting for their first write (for the job's summary)."""
-    shows, by_hand = mirrored(shows_root), set(followed(shows_root).values())
+    shows, by_hand = mirrored(shows_root), {cat.page_key(u) for u in followed(shows_root).values()}
     listed = wanted(cat.everything(), languages or [], per_category)
-    return sum(1 for s in listed if s["kind"] == "show" and s["url"] not in shows and s["url"] not in by_hand)
+    return sum(
+        1 for s in listed if s["kind"] == "show" and s["url"] not in shows and cat.page_key(s["url"]) not in by_hand
+    )
 
 
 def names_in(root: Path, paths: list[str]) -> set[str]:

@@ -12,6 +12,7 @@ from urllib.parse import quote
 from mimir_tv.catalog import Catalog, CatalogError
 
 FOLLOWED = ".followed.json"  # shows added to Jellyfin (title: the show's page), checked for new episodes
+MIRRORED = ".mirrored.json"  # what the whole catalogue wrote (mirror.py): {link: {"name": its folder, "at"}}
 ADDED = ".added.json"  # movies added to Jellyfin by hand (folder names): the mirror's limit never removes them
 LIST_FOR = 6 * 3600  # how old a show's listing may be when it is written
 
@@ -73,14 +74,18 @@ def followed(root: Path) -> dict[str, str]:
 
 
 def show_folder(root: Path, title: str, show_url: str, cat: Catalog) -> str:
-    """The show's folder, which is also its name in Jellyfin: the title, unless another followed show already uses
-    that name (the same show from another section); then the title with its section. Adding again reuses it."""
+    """The show's folder, which is also its name in Jellyfin: the title, unless another show already uses that
+    name, added by hand (the same show from another section) or written by the whole catalogue (the same title in
+    another language); then the title with its section. Adding again, or adding a show the whole catalogue wrote,
+    reuses its folder."""
     shows = followed(root)
-    for name, url in shows.items():
-        if url == show_url:
+    mirrored = json.loads((root / MIRRORED).read_text()) if (root / MIRRORED).exists() else {}
+    key = cat.page_key(show_url)
+    for name, url in [*shows.items(), *((r["name"], u) for u, r in mirrored.items())]:
+        if cat.page_key(url) == key:
             return name
     name = safe(title)
-    taken = {n.lower() for n in shows}  # macOS folder names ignore case
+    taken = {n.lower() for n in shows} | {r["name"].lower() for r in mirrored.values()}  # macOS: case is ignored
     if name.lower() not in taken:
         return name
     label = cat.section_of(show_url)

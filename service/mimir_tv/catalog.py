@@ -121,6 +121,11 @@ class Catalog:
         """A thumbnail host the proxy may fetch from though the catalogue did not list it since the start."""
         return False
 
+    def page_key(self, url: str) -> str:
+        """The same for every link to one page: a provider whose links carry parts that change (a thumbnail) drops
+        them, so a show added by hand and the same show written by the whole catalogue are one show."""
+        return url
+
     def section_of(self, url: str) -> str:
         """Which section a show is from, to tell apart two shows of the same name ("TV shows, Spanish")."""
         return ""
