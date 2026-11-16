@@ -430,6 +430,27 @@ def test_files_already_there_are_left_alone(tmp_path):
     assert target.stat().st_mtime == 1 and "p=" not in target.read_text()
 
 
+def test_a_numbered_shows_episodes_carry_its_name_and_files_already_there_are_kept(cat, tmp_path):
+    # A second show of the same name gets "Dark (2)" as its folder (its name in Jellyfin's folders); its episodes
+    # are named after the show ("Dark S01E01"), as Jellyfin shows an episode's file name when it knows no better.
+    files = write_show(cat, "tv1", SHOW, "Dark (2)", tmp_path, "http://air:8724")
+    assert sorted(p.name for p in files.values()) == [
+        "Dark S01E01.strm",
+        "Dark S01E02 - Lies.strm",
+        "Dark S02E01 - Truth.strm",
+    ]
+    # An episode already there under its older name stays (a rename would lose what Jellyfin knows of it) and is not
+    # written twice.
+    old = tmp_path / "Dark (2)" / "Season 01" / "Dark (2) S01E01.strm"
+    files[EP.format(s=1, e=1)].rename(old)
+    again = write_show(cat, "tv1", SHOW, "Dark (2)", tmp_path, "http://air:8724")
+    assert again[EP.format(s=1, e=1)] == old
+    assert sorted(p.name for p in (tmp_path / "Dark (2)" / "Season 01").iterdir()) == [
+        "Dark (2) S01E01.strm",
+        "Dark S01E02 - Lies.strm",
+    ]
+
+
 def test_hourly_jobs_record_each_run_under_the_providers_id(home, cat, tmp_path, monkeypatch):
     root = tmp_path / "media" / "tv1"
     write_show(cat, "tv1", SHOW, "Dark", root, "http://air:8724")
@@ -686,7 +707,7 @@ def test_the_whole_catalogue_goes_into_jellyfin_a_batch_of_shows_at_a_time(home,
     assert summary == "My TV: 0 movies, 1 shows (1 episodes), 1 failed, 1 details and 0 posters, 1 shows waiting"
     app_jobs.REINDEX["timer"].join(5)
     assert fake.reindexed == reindexed + 1  # what it wrote is found by search within minutes
-    assert (shows_root / "DARK (2)/Season 01/DARK (2) S01E01.strm").exists()
+    assert (shows_root / "DARK (2)/Season 01/DARK S01E01.strm").exists()
     assert fake.libs["My TV"]["Locations"] == [str(shows_root)] and fake.libs["My TV"]["CollectionType"] == "tvshows"
 
     # A mirrored show keeps its latest episodes only; favourited in Jellyfin, it is followed and gets them all.

@@ -43,8 +43,11 @@ def safe(name: str) -> str:
 def write_show(
     cat: Catalog, pid: str, show_url: str, title: str, root: Path, resolver: str, ttl: int = LIST_FOR
 ) -> dict[str, Path]:
-    """Writes (or refreshes) a show's .strm files; returns each episode's file by its link."""
+    """Writes (or refreshes) a show's .strm files; returns each episode's file by its link. title is the show's
+    folder; its episodes are named after the show without the folder's number ("Dark (2)": "Dark S01E01"). An
+    episode already written under another name keeps its file: a renamed file is a new item to Jellyfin."""
     show_dir = root / safe(title)
+    show_name = re.sub(r" \(\d+\)$", "", safe(title))
     items = cat.page(show_url, ttl=ttl)
     seasons = [i for i in items if i["kind"] == "folder"]
     groups = [(number(s["title"]) or n, cat.page(s["url"], ttl=ttl)) for n, s in enumerate(reversed(seasons), 1)]
@@ -55,13 +58,17 @@ def write_show(
     for season, episodes in groups:
         folder = show_dir / f"Season {season:02d}"
         folder.mkdir(parents=True, exist_ok=True)
+        there = {}  # an episode's link (as its file has it) -> the file
+        for f in folder.glob("*.strm"):
+            if m := re.search(r"[?&]path=([^&\s]*)", f.read_text()):
+                there[m.group(1)] = f
         # Listings are newest first; without a number in the title, the oldest is episode 1.
         for pos, ep in enumerate(reversed([e for e in episodes if e["kind"] == "video"]), 1):
             n = number(ep["title"]) or pos
             label = re.sub(r"^(episode|ep)\s*\.?\s*\d+\s*[.:-]?\s*", "", ep["title"], flags=re.I)
-            name = f"{safe(title)} S{season:02d}E{n:02d}" + (f" - {safe(label)}" if label else "")
-            target = folder / f"{name}.strm"
+            name = f"{show_name} S{season:02d}E{n:02d}" + (f" - {safe(label)}" if label else "")
             line = play_line(resolver, pid, ep["url"])
+            target = there.get(quote(ep["url"], safe=""), folder / f"{name}.strm")
             if not keep(target, line, pid):
                 target.write_text(line)
             files[ep["url"]] = target
