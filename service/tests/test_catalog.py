@@ -432,7 +432,9 @@ def test_hourly_jobs_record_each_run_under_the_providers_id(home, cat, tmp_path,
     monkeypatch.setattr(app_jobs, "REINDEX_AFTER", 0)
     assert app_jobs.new_episodes(jobs, home, jf, tmp_path / "media", "http://air:8724") == 1
     app_jobs.REINDEX["timer"].join(5)
-    assert fake.scans and fake.reindexed == 1  # search finds the new episodes once Jellyfin's scan is through, not the next day
+    assert (
+        fake.scans and fake.reindexed == 1
+    )  # search finds the new episodes once Jellyfin's scan is through, not the next day
     down = Jellyfin("http://jf", "k", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     cat.pages[S2] = [video("Episode 3. Newer", EP.format(s=2, e=3)), *cat.pages[S2]]
     with pytest.raises(JellyfinError):
@@ -753,6 +755,11 @@ def test_a_limited_whole_catalogue_keeps_the_newest_of_each_category_and_trashes
     run({"mirror_languages": ["Telugu", "Hindi"], "mirror_per_category": 2})
     assert not (movies_root / "D1").exists()
 
+    # Movies have a limit of their own (0: all of them): every Telugu and Hindi movie comes back, shows keep theirs.
+    run({"mirror_languages": ["Telugu", "Hindi"], "mirror_per_category": 2, "mirror_movies_per_category": 0})
+    assert {"T1", "T2", "T3", "T4", "H1"} <= {d.name for d in movies_root.iterdir()}
+    assert not (movies_root / "D1").exists() and [d.name for d in shows_root.iterdir() if d.is_dir()] == ["Dark"]
+
 
 def test_into_jellyfin_previews_without_moving_anything_then_saves_the_houses_choice(home, tmp_path):
     media, air = tmp_path / "media", "http://air:8724"
@@ -780,17 +787,24 @@ def test_into_jellyfin_previews_without_moving_anything_then_saves_the_houses_ch
     # Telugu only, one per category: T1 wanted; T2 watched (stays); H1 and Heat would go. Nothing moves yet.
     seen = c.post("/api/settings/into/preview", json={"languages": ["Telugu"], "per_category": 1}).json()
     assert seen["catalogue"][0]["movies"] == {"wanted": 1, "now": 4, "to_trash": 2}
+    assert now["movies_per_category"] == now["per_category"] == 0  # movies follow the shows' limit until set
+    # Movies on a limit of their own: all Telugu movies wanted, shows still one per category.
+    seen = c.post(
+        "/api/settings/into/preview", json={"languages": ["Telugu"], "per_category": 1, "movies_per_category": 0}
+    ).json()
+    assert seen["catalogue"][0]["movies"]["wanted"] == 2
     assert {"T1", "T2", "H1", "Heat (1995)"} <= {d.name for d in movies_root.iterdir()}
 
     assert c.put("/api/settings/into", json={"languages": ["Telugu", "Telugu"]}).status_code == 422
-    saved = c.put("/api/settings/into", json={"languages": ["Telugu"], "per_category": 1, "mirror": {"tv1": False}})
-    assert saved.status_code == 200
+    body = {"languages": ["Telugu"], "per_category": 1, "movies_per_category": 0, "mirror": {"tv1": False}}
+    assert c.put("/api/settings/into", json=body).status_code == 200
     cfg = settings.load(home.config)
     assert (cfg["library_languages"], cfg["mirror_per_category"], cfg["providers"][0]["mirror"]) == (
         ["Telugu"],
         1,
         False,
     )
+    assert cfg["mirror_movies_per_category"] == 0 and c.get("/api/settings/into").json()["movies_per_category"] == 0
 
 
 def test_a_dub_added_by_hand_is_its_own_film_and_the_mirror_leaves_its_folder_alone(cat, tmp_path):

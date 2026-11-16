@@ -85,7 +85,11 @@ def whole_catalogue(
                 continue
             where, names = roots(media_root, entry["id"]), libraries(entry)
             mirror.follow_favourites(where["shows"], jf.favourite_show_paths())  # all their episodes from now
-            langs, cap = cfg["library_languages"], cfg["mirror_per_category"]
+            langs, cap, movie_cap = (
+                cfg["library_languages"],
+                cfg["mirror_per_category"],
+                cfg["mirror_movies_per_category"],
+            )
             done = mirror.mirror(
                 cat,
                 entry["id"],
@@ -95,10 +99,11 @@ def whole_catalogue(
                 languages=langs,
                 per_category=cap,
                 episodes=cfg["mirror_episodes"],
+                movies_per_category=movie_cap,
             )
             removed = {"shows": 0, "movies": 0}
-            if langs or cap:
-                keep = {x["url"] for x in mirror.wanted(cat.everything(), langs, cap)}
+            if langs or cap or movie_cap:
+                keep = {x["url"] for x in mirror.wanted(cat.everything(), langs, cap, movie_cap)}
                 kept = jf.kept_paths()
                 for kind in removed:
                     removed[kind] = mirror.prune(where[kind], keep, mirror.names_in(where[kind], kept), trash)

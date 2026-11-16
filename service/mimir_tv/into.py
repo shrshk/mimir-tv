@@ -59,6 +59,7 @@ class Choice(BaseModel):
     languages: list[str] = Field(default_factory=list, max_length=30)
     mirror: dict[str, bool] = Field(default_factory=dict)  # provider id -> whole catalogue on or off
     per_category: int = Field(0, ge=0, le=100_000)
+    movies_per_category: int | None = Field(None, ge=0, le=100_000)  # None: as per_category
     episodes: int = Field(10, ge=1, le=10_000)
     onapps: bool = True
     onapps_per_app: int = Field(3000, ge=1, le=20_000)
@@ -84,7 +85,7 @@ def preview(c: Choice, catalogs: Catalogs, jf: Jellyfin, media_root: Path, strea
             continue
         if not listed:
             continue
-        want = mirror.wanted(listed, c.languages, c.per_category)
+        want = mirror.wanted(listed, c.languages, c.per_category, c.movies_per_category)
         keep = {x["url"] for x in want}
         where, row = roots(media_root, entry["id"]), {"provider": entry["name"]}
         for kind in ("movies", "shows"):
@@ -131,6 +132,9 @@ def router(config: Path, catalogs: Catalogs, jf: Jellyfin, media_root: Path, str
             "tmdb_languages": sorted(CODES),
             "providers": providers,
             "per_category": cfg["mirror_per_category"],
+            "movies_per_category": cfg["mirror_per_category"]
+            if cfg["mirror_movies_per_category"] is None
+            else cfg["mirror_movies_per_category"],
             "episodes": cfg["mirror_episodes"],
             "onapps": cfg["onapps"],
             "onapps_per_app": cfg["onapps_per_app"],
@@ -158,6 +162,7 @@ def router(config: Path, catalogs: Catalogs, jf: Jellyfin, media_root: Path, str
                 "library_languages": langs,
                 "providers": providers,
                 "mirror_per_category": c.per_category,
+                "mirror_movies_per_category": c.movies_per_category,
                 "mirror_episodes": c.episodes,
                 "onapps": c.onapps,
                 "onapps_per_app": c.onapps_per_app,

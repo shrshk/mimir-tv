@@ -119,7 +119,7 @@ in Wholphin does not need it.
 | `backup_dir` | (off) | The folder for the nightly backup (3:30): mimir-tv's and Jellyfin's settings, lists and watch history |
 | `jellyfin_data` | `~/Library/Application Support/jellyfin` | Where this Mac's Jellyfin keeps its data (for the backup) |
 | `library_languages` | (all) | The house's languages, in order (e.g. `["Telugu", "Hindi", "English"]`): what goes into Jellyfin, Wholphin's rows and collections, Live TV's channel groups. Settings → **Into Jellyfin** sets this and the rest of this block, with a preview |
-| `mirror_per_category`, `mirror_episodes` | `0` (all), `10` | The whole catalogue in Jellyfin (a provider's `"mirror": true`): the newest N titles per category, each show's latest episodes; titles outside go to the Trash unless added by hand, watched or favourited |
+| `mirror_per_category`, `mirror_movies_per_category`, `mirror_episodes` | `0` (all), as shows, `10` | The whole catalogue in Jellyfin (a provider's `"mirror": true`): the newest N shows per category, the newest N movies per category (movies are cheap: set 0 for all of them), each show's latest episodes; titles outside go to the Trash unless added by hand, watched or favourited |
 | `onapps`, `onapps_per_app`, `onapps_languages` | on, `3000`, on | On my apps (your streaming apps' popular titles from TMDB) in Jellyfin: on or off, titles per app, only titles first made in your languages |
 | `wholphin_rows`, `wholphin_channels` | on, (none) | Wholphin's home rows on the TV (when languages are set), and a row per TV channel named here |
 | `recs_avoid_genres`, `recs_languages` | (none) | Recommendations leave out these genres and keep only these original languages (`te`, `hi`, `en` …) |

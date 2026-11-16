@@ -58,17 +58,18 @@ def save(root: Path, done: dict[str, dict]) -> None:
     tmp.replace(root / MIRRORED)
 
 
-def wanted(listed: list[dict], languages: list[str], per_category: int) -> list[dict]:
+def wanted(listed: list[dict], languages: list[str], per_category: int, movies: int | None = None) -> list[dict]:
     """The titles to mirror: those in languages (empty: every language; a dub has its own, e.g. "Hindi dubbed"),
-    then the first per_category of each category (0: all). A category is a kind, language, genres and channel, as
-    the catalogue lists it, newest first."""
+    then the first per_category of each category (0: all); movies, the first `movies` of theirs when set. A category
+    is a kind, language, genres and channel, as the catalogue lists it, newest first."""
     out, seen = [], {}
     for x in listed:
         if languages and x.get("language") not in languages:
             continue
         key = (x["kind"], x.get("language"), tuple(x.get("genres", [])), x.get("studio"))
         seen[key] = seen.get(key, 0) + 1
-        if not per_category or seen[key] <= per_category:
+        cap = movies if movies is not None and x["kind"] == "movie" else per_category
+        if not cap or seen[key] <= cap:
             out.append(x)
     return out
 
@@ -94,12 +95,13 @@ def mirror(
     languages: list[str] | None = None,
     per_category: int = 0,
     episodes: int = EPISODES_KEPT,
+    movies_per_category: int | None = None,
 ) -> dict[str, int]:
     """One run: every wanted movie not written yet, then up to per_run wanted shows, then details for every written
     title (a batch of posters a run). Returns counts of what was written."""
     now = time.time() if now is None else now
     everything = cat.everything()
-    listed = wanted(everything, languages or [], per_category)
+    listed = wanted(everything, languages or [], per_category, movies_per_category)
     out = {"movies": 0, "shows": 0, "episodes": 0, "failed": 0, "details": 0, "posters": 0}
 
     # Movies added by hand keep their folders: a mirrored one of the same title (a dub, often) gets its own.

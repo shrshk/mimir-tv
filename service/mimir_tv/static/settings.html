@@ -174,7 +174,8 @@ function lines(key) {
   if (key === "into") {
     if (!into) return "";
     const l = into.languages.length ? into.languages.map(esc).join(", ") : "Every language";
-    const whole = into.providers.some(p => p.mirror) ? (into.per_category ? `newest ${into.per_category} per category` : "all of it") : "off";
+    const lim = (n, what) => n ? `newest ${n} ${what} per category` : `all ${what}`;
+    const whole = into.providers.some(p => p.mirror) ? (into.per_category || into.movies_per_category ? `${lim(into.movies_per_category, "movies")}, ${lim(into.per_category, "shows")}` : "all of it") : "off";
     const apps = into.onapps ? `${into.onapps_per_app} per app${into.onapps_languages && into.languages.length ? ", your languages" : ""}` : "off";
     return `<div class="line opt"><span class="mark">–</span><span>${l}</span></div>`
       + `<div class="line opt"><span class="mark">–</span><span>Whole catalogue: ${whole} · On my apps: ${apps}</span></div>`;
@@ -390,7 +391,8 @@ function intoForm() {
     ${i.offered.length ? `<div class="row">${i.offered.slice(0, 16).map(n => `<button type="button" class="ghost" data-addlang="${esc(n)}">+ ${esc(n)}</button>`).join("")}</div>` : ""}
     <div class="mute">The whole catalogue</div>
     ${cats.length ? `<div class="checks">${cats.map(p => `<label class="row"><input type="checkbox" name="mirror" value="${esc(p.id)}" ${on(p.mirror)}> ${esc(p.name)}</label>`).join("")}</div>
-    <label>Newest titles of each category (0: all)<input type="number" name="per_category" min="0" value="${i.per_category}"></label>
+    <label>Newest movies of each category (0: all; movies are cheap: no page reads)<input type="number" name="movies_per_category" min="0" value="${i.movies_per_category}"></label>
+    <label>Newest shows of each category (0: all; about 100 new shows an hour)<input type="number" name="per_category" min="0" value="${i.per_category}"></label>
     <label>Latest episodes of each show<input type="number" name="episodes" min="1" value="${i.episodes}"></label>` : `<p class="mute">No provider here lists a whole catalogue.</p>`}
     <div class="mute">On my apps (your streaming apps' popular titles, from TMDB)</div>
     ${i.tmdb ? "" : `<p class="mute">Needs the TMDB token (Your streaming apps).</p>`}
@@ -409,7 +411,7 @@ function intoBody(f) {
   const ticked = n => !!f.querySelector(`[name=${n}]`)?.checked;
   return {languages: list("languages"),
     mirror: Object.fromEntries([...f.querySelectorAll("[name=mirror]")].map(x => [x.value, x.checked])),
-    per_category: num("per_category", into.per_category), episodes: num("episodes", into.episodes),
+    per_category: num("per_category", into.per_category), movies_per_category: num("movies_per_category", into.movies_per_category), episodes: num("episodes", into.episodes),
     onapps: ticked("onapps"), onapps_per_app: num("onapps_per_app", into.onapps_per_app), onapps_languages: ticked("onapps_languages"),
     wholphin_rows: ticked("wholphin_rows"), wholphin_channels: list("wholphin_channels")};
 }
