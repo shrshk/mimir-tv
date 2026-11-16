@@ -73,6 +73,8 @@ class FakeJellyfin:
             self.reindexed += 1
             return httpx.Response(204)
         if path == "/Items" and q.get("SearchTerm"):  # Jellyfin's search: the shows a scan would find, by name
+            if "Series" not in q.get("IncludeItemTypes", "Series").split(","):  # asked for another kind
+                return httpx.Response(200, json={"Items": []})
             term = q["SearchTerm"].lower()
             shows = [
                 d

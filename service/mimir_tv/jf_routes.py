@@ -66,12 +66,56 @@ def words(text: str) -> list[str]:
     return re.findall(r"[^\W_]+", plain.lower())
 
 
+SHORT = 3  # a search word this short only matches the start of a word, or initials ("nba" is not in "Nanbagal")
+TYPO = 5  # a search word this long also matches a word one letter off ("telgu", "Telugu"), as Jellyfin forgives
+
+
+def slip(a: str, b: str) -> bool:
+    """a and b differ by one letter at most: one left out, added or changed."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    return a[i + 1 :] == b[i + 1 :] or a[i:] == b[i + 1 :] or a[i + 1 :] == b[i:]
+
+
+def closeness(name: str, q: str) -> int:
+    """Wholphin's order within a row (SearchRelevance): the exact name, then a name starting with the search, then
+    one with a word starting with it, then one containing it, then the rest; lower is closer."""
+    name, q = name.lower(), q.lower().strip()
+    if name == q:
+        return 0
+    if name.startswith(q):
+        return 100
+    if f" {q}" in name:
+        return 200
+    return 300 if q in name else 400
+
+
+KIND_ORDER = {kind: n for n, kind in enumerate(Jellyfin.SEARCHED)}  # rows: movies, shows, episodes, collections …
+
+
 def named(q: str, i: dict) -> bool:
     """Every word of the search (of two letters or more) is in the item's name, its original name or its show's name,
-    in any order. Jellyfin's own search is loose: "M.S. Dhoni: The Untold Story" also finds M*A*S*H and McCloud."""
-    hay = " ".join(words(" ".join(filter(None, (i.get("Name"), i.get("OriginalTitle"), i.get("SeriesName"))))))
-    squashed = hay.replace(" ", "")  # "ms" finds "M.S."
-    return all(w in hay or w in squashed for w in words(q) if len(w) > 1)
+    in any order; a short word (SHORT letters or fewer) only as the start of a word or as initials. Jellyfin's own
+    search is loose: "M.S. Dhoni: The Untold Story" also finds M*A*S*H and McCloud."""
+    found = words(" ".join(filter(None, (i.get("Name"), i.get("OriginalTitle"), i.get("SeriesName")))))
+    hay = " ".join(found)
+    initials, run = set(), ""  # runs of one-letter words: "M.S. Dhoni" has "ms"
+    for w in [*found, ""]:
+        if len(w) == 1:
+            run += w
+        elif run:
+            initials.add(run)
+            run = ""
+
+    def has(w: str) -> bool:
+        if len(w) > SHORT:
+            return w in hay or w in hay.replace(" ", "") or (len(w) >= TYPO and any(slip(w, x) for x in found))
+        return any(x.startswith(w) for x in found) or any(w in run for run in initials)
+
+    return all(has(w) for w in words(q) if len(w) > 1)
 
 
 def card(i: dict) -> dict:
@@ -169,8 +213,11 @@ def router(
     @api.get("/api/jf/search")
     def search(q: str):
         # TvChannel: live channels from an IPTV provider (M2), played by Jellyfin's Live TV
-        found = guard(jf.search, q)
-        return [card(i) for i in found if i.get("Type") in PLAYABLE | {"Series", "Folder", "TvChannel"} and named(q, i)]
+        hits = [i for i in guard(jf.search, q) if i.get("Type") in KIND_ORDER and named(q, i)]
+        hits.sort(
+            key=lambda i: (KIND_ORDER[i["Type"]], closeness(i.get("Name") or "", q))
+        )  # stable: Jellyfin's order next
+        return [card(i) for i in hits]
 
     @api.get("/api/jf/programmes")
     def programmes(q: str = Query(max_length=200)):

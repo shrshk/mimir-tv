@@ -162,8 +162,11 @@ are files readable by you only.
   Live TV's channel groups. Posters get badges (the language, the apps), so Wholphin shows what mimir-tv shows. A
   preview says what a change would add and send to the Trash before you save; watched, favourited and hand-added
   titles stay.
-- **Search**: one box over Jellyfin, each provider and your streaming apps. Jellyfin's results keep only titles
-  with every word you typed. People come first, as in Wholphin: cast and crew with that name, each opening a page of
+- **Search**: one box over Jellyfin, each provider and your streaming apps. Jellyfin's part works as Wholphin's
+  search does: a search a kind (movies, shows, episodes, collections, channels, the guide's programmes, videos,
+  playlists), a titled row each, closest names first (the exact name, then names starting with it, then a word
+  starting with it); a word one letter off is forgiven. Unlike Wholphin, every word you typed must be in the name,
+  and a word of three letters or fewer must start a word (or be initials: "ms" finds "M.S."). People come first: cast and crew with that name, each opening a page of
   their titles in Jellyfin; a title's page names its cast and director the same way. With a TV guide in Jellyfin's
   Live TV (an XMLTV source, such as a provider plugin's), "On TV" lists what is on now or later today under that name
   ("arsenal", "cricket"), each card playing its channel.

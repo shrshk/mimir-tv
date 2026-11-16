@@ -2,6 +2,7 @@
 (Jellyfin 10.11+ rejects the old X-Emby-Authorization header)."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -105,16 +106,30 @@ class Jellyfin:
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
-    def search(self, q: str, limit: int = 40) -> list[dict]:
-        params = {
-            "SearchTerm": q,
-            "Recursive": "true",
-            "Limit": str(limit),
-            "Fields": self.FIELDS,
-            "IncludeItemTypes": "Movie,Series,Episode,Video,MusicVideo,Folder,TvChannel",  # channels: IPTV
-            "userId": self.user(),  # without a user Jellyfin leaves out Live TV's channels
-        }
-        return (self._call("GET", "/Items", params) or {}).get("Items", [])
+    # What search looks for, a Jellyfin search each (as Wholphin does: one row per kind), in the order rows show.
+    SEARCHED = ("Movie", "Series", "Episode", "BoxSet", "TvChannel", "Video", "MusicVideo", "Playlist", "Folder")
+
+    def search(self, q: str, limit: int = 50) -> list[dict]:
+        """Up to `limit` of each kind (SEARCHED) whose name Jellyfin matches, in parallel; a kind Jellyfin fails
+        to search is left out."""
+        user = self.user()  # without a user Jellyfin leaves out Live TV's channels
+
+        def one(kind: str) -> list[dict]:
+            params = {
+                "SearchTerm": q,
+                "Recursive": "true",
+                "Limit": str(limit),
+                "Fields": self.FIELDS,
+                "IncludeItemTypes": kind,
+                "userId": user,
+            }
+            try:
+                return (self._call("GET", "/Items", params) or {}).get("Items", [])
+            except JellyfinError:
+                return []
+
+        with ThreadPoolExecutor(max_workers=len(self.SEARCHED)) as pool:
+            return [i for found in pool.map(one, self.SEARCHED) for i in found]
 
     def programmes(self, q: str, hours: int = 24, limit: int = 200) -> list[dict]:
         """The TV guide's programmes matching the search (loosely) that are on now or start within `hours`."""

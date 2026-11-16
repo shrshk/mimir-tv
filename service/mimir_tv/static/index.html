@@ -1023,9 +1023,17 @@ $("#q").addEventListener("input", () => {
       // Each poster says its section too: the same show is often in several, with different seasons.
       const sections = new Map();
       const add = (name, tiles) => tiles.length && sections.set(name, (sections.get(name) || []).concat(tiles));
-      // The TV guide first: what is on now (or later today) under that name, each card playing its channel.
-      add("On TV", (got.tv || []).map(p => tile(p, onAir(p))));
-      add("In Jellyfin", mine.map(m => tile(m)).concat(late.map(i => tile(i, i.sub))));
+      // Jellyfin's results in Wholphin's rows and order (one search a kind, closest names first, from the Air):
+      // movies, shows, episodes, collections, channels, the guide's programmes (on now or later today), the rest.
+      // A provider's title Jellyfin's search missed joins its kind's row.
+      const ROWS = [["Movie", "Movies"], ["Series", "TV shows"], ["Episode", "Episodes"], ["BoxSet", "Collections"],
+        ["TvChannel", "Channels"], ["__tv", "On TV"], ["Video", "Videos"], ["MusicVideo", "Music videos"],
+        ["Playlist", "Playlists"], ["Folder", "Folders"]];
+      for (const [kind, name] of ROWS) {
+        if (kind === "__tv") { add(name, (got.tv || []).map(p => tile(p, onAir(p)))); continue; }
+        add(name, mine.filter(m => m.type === kind).map(m => tile(m))
+          .concat(late.filter(i => (i.kind === "folder" ? "Series" : "Movie") === kind).map(i => tile(i, i.sub))));
+      }
       add("On your apps", elsewhere.map(w => tile(w, w.year)));
       for (const g of groups) add(g.section, g.items.map(i => tile({...i, src: g.src}, [g.section, i.sub].filter(Boolean).join(" · "))));
       if (!sections.has(pick)) pick = "";
@@ -1035,7 +1043,9 @@ $("#q").addEventListener("input", () => {
       }
       // People first (cast and crew whose name it is), as in Wholphin's search: each opens their titles here.
       if (!pick && (got.people || []).length) html = `<div class="people">${got.people.map(personBtn).join("")}</div>` + html;
-      html += (pick ? sections.get(pick) : [...sections.values()].flat()).join("");
+      // All: a titled row per group, as Wholphin's search shows them; a chip picked: that group as a grid.
+      html += pick ? sections.get(pick).join("")
+        : [...sections].map(([name, t]) => `<div class="rowhead"><h3>${esc(name)}</h3></div><div class="strip">${t.join("")}</div>`).join("");
       const still = provs().filter(p => got["p:" + p.id] === null).map(p => p.name);
       if (html && waiting) html += `<div class="full mute" style="margin-top:12px">Still searching${still.length ? " " + esc(still.join(", ")) : ""}…</div>`;
       $("#grid").innerHTML = html || (waiting ? `<div class="skel">${"<i></i>".repeat(8)}</div>` : `<div class="full mute">Nothing matches “${esc(q)}”.</div>`);

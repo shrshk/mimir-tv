@@ -169,7 +169,8 @@ def fake(request: httpx.Request) -> httpx.Response:
         # Like Jellyfin: asked without a user, Live TV's channels are left out.
         found = [i for i in ITEMS.values() if any(w in named(i) for w in words)]
         found = [i for i in found if q.get("userId") == "u1" or i["Type"] != "TvChannel"]
-        return httpx.Response(200, json={"Items": found})
+        kinds = q["IncludeItemTypes"].split(",") if q.get("IncludeItemTypes") else None  # one kind a call, as Wholphin
+        return httpx.Response(200, json={"Items": [i for i in found if not kinds or i["Type"] in kinds]})
     if p == f"/Videos/{MOVIE}/stream":
         assert "Token=" in request.headers["Authorization"]
         rng = request.headers.get("Range")
@@ -741,3 +742,56 @@ def test_search_finds_whats_on_tv_now_and_later_today_from_the_guide(tmp_path, m
         "Premier League: Arsenal v Chelsea"
     ]
     assert c.get("/api/jf/programmes", params={"q": "x"}).json() == []
+
+
+def test_a_short_search_word_starts_a_word_or_is_initials_never_inside_a_longer_one(tmp_path, monkeypatch):
+    names = {
+        "1a" * 16: ("NBA Tonight", "Video"),
+        "1b" * 16: ("Nanbagal Seythigal", "Series"),  # "nba" inside a word: not a match
+        "1c" * 16: ("M.S. Dhoni- The Untold Story (2016)", "Movie"),  # "ms": its initials
+        "1d" * 16: ("Thomas & Friends", "Series"),  # "ms" inside a word: not a match
+        "1e" * 16: ("Dhoom 2", "Movie"),
+    }
+    for id_, (name, kind) in names.items():
+        monkeypatch.setitem(ITEMS, id_, item(id_, name, kind))
+    _, c, _ = setup(tmp_path)
+
+    def search(q):
+        return sorted(i["title"] for i in c.get("/api/jf/search", params={"q": q}).json())
+
+    assert search("nba") == ["NBA Tonight"]
+    assert search("ms dhoni") == ["M.S. Dhoni- The Untold Story (2016)"]
+    assert search("dho") == ["Dhoom 2", "M.S. Dhoni- The Untold Story (2016)"]  # the start of a word, while typing
+    assert search("hom") == []  # not the middle of "Thomas"
+    assert search("homas") == ["Thomas & Friends"]  # a longer word may be anywhere in a name, as before
+
+
+def test_search_is_wholphins_a_group_per_kind_closest_names_first_and_spelling_slips_forgiven(tmp_path, monkeypatch):
+    names = {
+        "2a" * 16: ("The Dark Knight", "Movie"),
+        "2b" * 16: ("Dark Waters", "Movie"),
+        "2c" * 16: ("Dark", "Series"),
+        "2d" * 16: ("Darkwing Duck", "Series"),
+        "2e" * 16: ("Into the Dark", "Series"),
+        "2f" * 16: ("Dark Shows", "BoxSet"),  # a collection
+        "3a" * 16: ("Telugu News", "TvChannel"),
+    }
+    for id_, (name, kind) in names.items():
+        monkeypatch.setitem(ITEMS, id_, item(id_, name, kind))
+    _, c, _ = setup(tmp_path)
+
+    def search(q):
+        return [(i["type"], i["title"]) for i in c.get("/api/jf/search", params={"q": q}).json()]
+
+    # Movies, then shows, then the other kinds (Wholphin's rows), each closest first: the exact name, then a name
+    # starting with it, then a word starting with it, then anywhere in a word.
+    assert search("dark") == [
+        ("Movie", "Dark Waters"),
+        ("Movie", "The Dark Knight"),
+        ("Series", "Dark"),
+        ("Series", "Darkwing Duck"),
+        ("Series", "Into the Dark"),
+        ("BoxSet", "Dark Shows"),
+    ]
+    assert search("telgu news") == [("TvChannel", "Telugu News")]  # a letter left out, as Jellyfin forgives
+    assert search("drak") == []  # a short word is not guessed at
