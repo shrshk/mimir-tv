@@ -11,7 +11,7 @@ from mimir_tv.mcp_server import router
 from mimir_tv.streaming import Streaming, pick
 from mimir_tv.streaming import router as streaming_router
 from mimir_tv.tv import Tv, TvError
-from tests.test_jf import MOVIE, TV_APP, fake
+from tests.test_jf import ITEMS, MOVIE, TV_APP, USER_DATA, fake, item
 from tests.test_streaming import FakeTmdb
 
 TOKEN = "t" * 43
@@ -141,7 +141,8 @@ def test_whats_new_lists_episodes_the_library_added_lately_and_leaves_out_older_
             episode | {"Id": "e2", "Name": "Older", "IndexNumber": 2, "DateCreated": stamp(9 * day)},
         ],
     )
-    monkeypatch.setattr("tests.test_jf.NEXT_UP", [episode | {"Id": "e1"}])  # a show being watched
+    monkeypatch.setitem(ITEMS, "k1", item("k1", "Koffee with Karan", "Series"))
+    monkeypatch.setitem(USER_DATA, "k1", {"IsFavorite": True})  # a show on My list
     new, failed = tool(setup(tmp_path), "whats_new")
     assert not failed and "my_list" not in new  # no providers: no My list from them
     assert [(e["jellyfin_id"], e["show"], e["episode"]) for e in new["library"]] == [

@@ -458,27 +458,13 @@ class Jellyfin:
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
-    def my_shows(self) -> set[str]:
-        """The shows the user watches (in Next up or Continue watching) or favourited: their Jellyfin ids. A source
-        Jellyfin fails to give is left out."""
-        out: set[str] = set()
-        for get, key in ((lambda: self.next_up(100), "SeriesId"), (lambda: self.resume(100), "SeriesId")):
-            try:
-                out |= {i[key] for i in get() if i.get(key)}
-            except JellyfinError:
-                pass  # the others still count
-        try:
-            out |= {i["Id"] for i in self.favourites() if i.get("Type") == "Series"}
-        except JellyfinError:
-            pass
-        return out
-
     def recent_episodes(self, days: int = 7, limit: int = 60) -> list[dict]:
-        """Episodes added in the last `days` to the user's shows (my_shows), newest first. Other shows are left out:
-        the whole catalogue (mirror.py) adds hundreds of shows nobody here watches."""
+        """Episodes added in the last `days` to the shows on My list (the user's favourites), newest first. Other
+        shows are left out: the whole catalogue (mirror.py) adds hundreds nobody here watches, and a show taken off My
+        list stops here (Next up still has a show being watched)."""
         since = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - days * 86400))
         items = []
-        for show in sorted(self.my_shows()):
+        for show in sorted({i["Id"] for i in self.favourites() if i.get("Type") == "Series"}):
             params = {
                 "ParentId": show,
                 "Recursive": "true",

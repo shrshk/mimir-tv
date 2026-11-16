@@ -455,11 +455,16 @@ def test_home_rows_continue_watching_next_up_and_new_episodes(tmp_path, monkeypa
             | {"Id": "e5", "Name": "Episode 5", "ParentIndexNumber": 1, "IndexNumber": 5, "ImageTags": {"Primary": "x"}}
         ],
     )
+    monkeypatch.setitem(ITEMS, "s1", item("s1", "The Traitors (Telugu)", "Series"))
     _, c, _ = setup(tmp_path)
     rows = c.get("/api/jf/home").json()
     assert [(i["title"], i["progress"]) for i in rows["resume"]] == [("Wedding Film 4K", 25)]
     assert [(i["title"], i["sub"]) for i in rows["next_up"]] == [("Episode 5", "The Traitors (Telugu) · S01E05")]
     assert (rows["next_up"][0]["show"], rows["next_up"][0]["show_title"]) == ("jf:s1", "The Traitors (Telugu)")
+    # Watched but not on My list (or taken off it): its new episodes stay out; Next up still has it.
+    assert rows["new"] == []
+    USER_DATA["s1"] = {"IsFavorite": True}
+    rows = c.get("/api/jf/home").json()
     assert [i["title"] for i in rows["new"]] == ["Episode 7"]
     new = rows["new"][0]
     assert (new["sub"], new["thumb"]) == (

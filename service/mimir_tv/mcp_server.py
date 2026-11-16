@@ -82,8 +82,8 @@ TOOLS = [
     },
     {
         "name": "whats_new",
-        "description": "New episodes the home library (Jellyfin) added in the last days (play those with play_on_tv "
-        "jellyfin_id).",
+        "description": "New episodes of the shows on My list (Jellyfin favourites) the home library added in the last "
+        "days (play those with play_on_tv jellyfin_id).",
         "inputSchema": {"type": "object", "properties": {"days": {"type": "integer", "description": "default 7"}}},
     },
     {
