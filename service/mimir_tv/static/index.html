@@ -170,6 +170,8 @@
   /* A sheet's actions: the ways to play side by side on one line (▶ Jellyfin, 📺 TV), the quiet links on the next. */
   .sheet .acts button.p, .sheet .acts a.btn, .sheet .acts > button:not(.alt) { flex:1 1 calc(50% - 4px); justify-content:center; padding:12px; font-size:16px; }
   .sheet .acts .alt { order:1; }
+  .gico { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border:1.5px solid currentColor;
+          border-radius:50%; font:700 13px/1 -apple-system, system-ui, sans-serif; }
 
   /* Show page and episodes */
   .showbar { grid-column:1/-1; display:flex; flex-direction:column; gap:10px; margin:0 0 6px; }
@@ -598,8 +600,9 @@ function playInApp(id) {
 }
 // A title's Google page: its panel with cast, ratings, reviews and where to watch. In the Home Screen app the link
 // stays in the same window, so iOS opens it in a browser sheet over the app (Done comes back, the compass opens it in
-// Safari); in a browser tab it opens a new tab. Not on the TV. A dub's " · Language" is left out of the search.
-const googleLink = (title, show) => TV ? "" : `<a class="alt" href="https://www.google.com/search?q=${enc(title.replace(/\s*·\s*[^·]+$/, "") + (show ? " TV series" : ""))}"${navigator.standalone ? "" : ` target="_blank" rel="noopener"`}>Google ↗</a>`;
+// Safari); in a browser tab it opens a new tab. Not on the TV. A dub's " · Language" is left out of the search. Shown as a
+// plain G in a ring (not Google's own logo).
+const googleLink = (title, show) => TV ? "" : `<a class="alt" href="https://www.google.com/search?q=${enc(title.replace(/\s*·\s*[^·]+$/, "") + (show ? " TV series" : ""))}"${navigator.standalone ? "" : ` target="_blank" rel="noopener"`} aria-label="Google" title="Google"><span class="gico">G</span></a>`;
 function actions(v, k, ctx) {
   // A streaming title: its apps; in a sheet also 👍/👎 (recommendations learn from them).
   if (v.tmdb) return appButtons(v) + (ctx === "sheet" ? voteBtns(v) : "");
