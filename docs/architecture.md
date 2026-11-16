@@ -1,7 +1,10 @@
 # mimir-tv architecture
 
-mimir-tv is an explorer: it finds a title across your sources and hands playing to the app that should play it.
-Jellyfin plays your own videos and anything added from a provider; a streaming title opens in its app.
+mimir-tv fills Jellyfin and finds what is missing from it. On the Mac, its jobs write a provider's catalogue and
+the streaming apps' popular titles into Jellyfin, and lay out Wholphin's home rows and collections, so any Jellyfin
+app shows them. On the phone, its page searches every source and adds a missing title. It plays nothing itself:
+Jellyfin plays your videos and anything added from a provider (Wholphin on the TV, Streamyfin or Swiftfin on the
+phone), and a streaming title opens in its app.
 GitHub draws the diagrams below (Mermaid). When the architecture changes, update this file in the same commit.
 
 ## What runs where
@@ -10,13 +13,13 @@ GitHub draws the diagrams below (Mermaid). When the architecture changes, update
 flowchart LR
   subgraph phone["Phone / Mac browser"]
     pwa["mimir-tv page<br/>(Home Screen app)"]
-    swift["Swiftfin / Jellyfin web"]
+    swift["Streamyfin / Swiftfin / Jellyfin web"]
     apps_p["Streaming apps<br/>(their web links)"]
   end
-  subgraph tv["Android TV (no Tailscale)"]
-    tvapp["mimir-tv TV app<br/>(WebView on lan.home/?tv=1)"]
-    jftv["Jellyfin TV app"]
-    kodi["Kodi"]
+  subgraph tv["Android TV or Fire TV (no Tailscale)"]
+    jftv["Wholphin<br/>(Jellyfin app)"]
+    tvapp["mimir-tv TV app<br/>(optional, ?tv=1)"]
+    kodi["Kodi (optional)"]
     apps_tv["Netflix, Peacock, Prime Video …"]
   end
   subgraph mac["The home Mac"]
@@ -38,6 +41,8 @@ flowchart LR
   app -- "API key" --> jf
   app -- "writes" --> strm
   jf -- "reads" --> strm
+  jftv -- "browse, play" --> jf
+  swift -- "browse, play" --> jf
   jftv -- ".strm link" --> res
   res -- "its login" --> prov
   app -- "its login" --> prov
@@ -49,7 +54,10 @@ flowchart LR
 ```
 
 - The phone reaches the Mac over Tailscale; the TV has no Tailscale, so `lan.home` resolves to the Mac's LAN address
-  and serves both the TV app's page and the resolver.
+  and serves the resolver (and the optional TV app's page).
+- Wholphin and the phone's Jellyfin apps talk to Jellyfin only. What mimir-tv adds reaches them as Jellyfin items,
+  tags, collections, posters and display preferences, so they need nothing from mimir-tv at play time except the
+  resolver for a provider's links.
 - Providers are optional. A plugin provider (catalog.py) is in Settings' `providers` with a kind an installed plugin
   registers; without the plugin it is left out (`GET /api/connectors` lists the ones the page shows). Without a TMDB
   token, search leaves out the streaming apps.
@@ -106,6 +114,24 @@ The resolver's `/hls` relays the playlist, rewriting every variant, segment and 
 only for stream servers a provider handed out (not an open proxy). A link that expires is replaced from its list:
 the .strm line carries the list (`page=`) and the plugin's link() finds the fresh one there.
 
+### Into Jellyfin
+
+```mermaid
+flowchart LR
+  set["Settings: Into Jellyfin<br/>(languages, numbers)"] --> mirror["mirror.py<br/>whole catalogue, hourly"]
+  set --> onapps["onapps.py<br/>On my apps, daily"]
+  mirror -- ".strm + .nfo tags" --> jf["Jellyfin libraries"]
+  onapps -- ".strm to /api/streaming/launch" --> jf
+  badges["badges.py"] -- "poster.jpg" --> jf
+  grouping["grouping.py"] -- "collections per language and kind" --> jf
+  wholphin["wholphin.py"] -- "home rows (display preferences)" --> jf
+  jf --> w["Wholphin on each TV"]
+```
+
+One ordered list of languages (`library_languages`) drives every step. A title the house watched, favourited or
+added by hand is never sent to the Trash. A movie in another language is its own title ("Title · Language"), and a
+hand-added one keeps its folder when the mirror runs.
+
 ### A title on a streaming app
 
 ```mermaid
@@ -130,7 +156,10 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 | Job | Schedule | Does |
 |---|---|---|
 | `backup` | nightly 3:30 (when `backup_dir` is set) | mimir-tv's and Jellyfin's settings, lists and watch history; no keys or passwords |
+| `offsite` | after each backup | The backup folder to the rclone remote in settings (encrypted) |
 | `new-episodes` | hourly | New episodes of added shows into Jellyfin |
+| `whole-catalogue` | hourly | A provider's whole catalogue into Jellyfin (`mirror.py`), a batch of shows each run |
+| `on-my-apps` | daily | The streaming apps' popular titles into Jellyfin (`onapps.py`) |
 | `<id>-<job>` | the plugin's (checked hourly) | A provider's own jobs (catalog.Job), e.g. an index for search |
 
 ## Code map (`service/mimir_tv/`)
@@ -147,6 +176,17 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 | [providers.py](../service/mimir_tv/providers.py) | Settings' providers: IPTV (M3U, Xtream) through Jellyfin's Live TV, and adding a plugin provider |
 | [strm.py](../service/mimir_tv/strm.py) | `.strm` files for shows, movies and live channels; new episodes |
 | [resolver.py](../service/mimir_tv/resolver.py), [hls.py](../service/mimir_tv/hls.py) | The LAN listener players fetch from; the HLS relay |
+| [into.py](../service/mimir_tv/into.py) | Settings → Into Jellyfin: the languages and numbers, the preview, Live TV's channel groups |
+| [mirror.py](../service/mimir_tv/mirror.py) | The whole catalogue in Jellyfin: movies and shows as `.strm` with `.nfo` tags; dubs as their own titles; the Trash for titles that left |
+| [onapps.py](../service/mimir_tv/onapps.py) | On my apps: the streaming apps' popular titles as Jellyfin items that open the app |
+| [badges.py](../service/mimir_tv/badges.py) | Language and app badges drawn on posters, so every Jellyfin app shows them |
+| [grouping.py](../service/mimir_tv/grouping.py) | One Jellyfin collection per language, holding one per kind |
+| [wholphin.py](../service/mimir_tv/wholphin.py) | Wholphin's home rows, written to the user's Jellyfin display preferences |
+| [tvsetup.py](../service/mimir_tv/tvsetup.py) | `mimir-tv-setup <tv>`: another TV's apps, screensaver and Wholphin sign-in |
+| [tvmessage.py](../service/mimir_tv/tvmessage.py) | A doodle or photo from the phone shown over the TV for a few seconds (the TV app's overlay) |
+| [taste.py](../service/mimir_tv/taste.py) | What was watched, 👍/👎 and the house's rules, for an assistant that recommends |
+| [backup.py](../service/mimir_tv/backup.py) | The nightly backup and its off-site copy |
+| [vault.py](../service/mimir_tv/vault.py) | Logins encrypted in the database, the key in the Keychain |
 | [mylist.py](../service/mimir_tv/mylist.py) | When each Jellyfin favourite went on My list (newest first) |
 | [streaming.py](../service/mimir_tv/streaming.py) | Where titles stream (TMDB), the app catalogue and filter, open on the TV |
 | [tv.py](../service/mimir_tv/tv.py), [kodi.py](../service/mimir_tv/kodi.py) | The TV over ADB (open Jellyfin or an app, what is on screen); Kodi's JSON-RPC |
@@ -155,4 +195,4 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 | [mcp_server.py](../service/mimir_tv/mcp_server.py) | `POST /mcp` for an assistant (OpenClaw): tools that call the app's own routes in-process; bearer token, tailnet only |
 | [jobs.py](../service/mimir_tv/jobs.py) | The scheduled jobs and the jobs page routes |
 | [static/index.html](../service/mimir_tv/static/index.html) | The whole page: phone, Mac and TV mode (`?tv=1`, remote navigation) |
-| [android/](../android/) | The TV app: a WebView on mimir-tv's `?tv=1`, the address typed on first launch; mimir-tv serves its APK at `/tv/app.apk` |
+| [android/](../android/) | The optional TV app: a WebView on mimir-tv's `?tv=1`, the address typed on first launch; mimir-tv serves its APK at `/tv/app.apk` |

@@ -1,9 +1,27 @@
 # mimir-tv
 
-Your own streaming front end on top of Jellyfin: one place to explore and search your own videos, see which of
-your streaming apps has a title, and choose what Jellyfin shows. mimir-tv is the explorer; Jellyfin plays your
-videos (on the phone in Swiftfin, Streamyfin or the browser, on the TV in the Jellyfin app) and keeps track of what was watched,
-and a streaming title opens in its app.
+Fills your Jellyfin library and finds what is missing from it. mimir-tv has two parts:
+
+- **On the Mac, it fills Jellyfin.** It adds a provider's whole catalogue and the popular titles on your streaming
+  apps, in your languages. It draws badges on posters and sets up Wholphin's home rows and collections. Every Jellyfin
+  app then shows all of it, and mimir-tv does not need to be open.
+- **On the phone, it finds and adds.** You search Jellyfin, your providers and your streaming apps together. Add a
+  missing title to the library (＋ Jellyfin) or to your favourites (＋ My list), then play it on the phone or on the TV.
+
+Jellyfin plays everything and keeps track of what was watched. Use Wholphin on the TV and Streamyfin or Swiftfin on
+the phone. A streaming title opens in its own app.
+
+## How a house uses it
+
+| Where | App | For |
+|---|---|---|
+| TV (Android TV, Fire TV) | [Wholphin](https://github.com/damontecres/Wholphin) | Watching: home rows by app and language, collections, Live TV, My list, Continue watching |
+| Phone | mimir-tv (Home Screen app) | Finding a title anywhere and adding it to Jellyfin or My list; 📺 TV to start it on a TV |
+| Phone | Streamyfin or Swiftfin | Watching on the phone |
+| The Mac | Jellyfin and mimir-tv | The library, the jobs that fill it, the resolver that plays a provider's links |
+
+The TV app ([android/](android/), `?tv=1`) puts mimir-tv's own page on the TV. It is optional: Wholphin does most of
+what a TV needs, because mimir-tv puts its rows and titles in Jellyfin.
 
 Providers are optional: live TV from IPTV (an M3U playlist or an Xtream Codes login, played by Jellyfin's Live TV),
 and providers with a catalogue of their own through a provider plugin (see below). Kodi and the TV add ways to play. Your streaming apps (Netflix, Prime Video, Peacock …) are a filter: search counts only the ones
@@ -50,7 +68,7 @@ passwords.
 | `/setup` in the browser | What this Mac needs (Homebrew, uv, Jellyfin, Tailscale), with an Install button that works only on the Mac itself and asks first; then setup one step at a time |
 | `/settings` in the browser | What works (✓/✗ with the fix) and every setting: Jellyfin, providers, your apps, TVs (pair each), Kodi, phones |
 | `scripts/restore-mac.sh <backup>` | Puts a nightly backup back (asks first; keeps what is there as *.before-restore) |
-| `/tv/app.apk` | The TV app ([android/](android/) in this repo) for the TV's Downloader app; Settings → TV app has the steps |
+| `/tv/app.apk` | The optional TV app ([android/](android/) in this repo) for the TV's Downloader app; Settings → TV app has the steps |
 | `scripts/install-mac.sh` | Install or update the app (`--remove` to remove it; files and settings stay) |
 | `mimir-tv-setup <tv>` | Another TV set up like the first (below) |
 
@@ -68,6 +86,15 @@ needs its apps, a sign-in and a screensaver:
 4. Wholphin: Settings → Home → use the server's layout. Immich TV: sign in, then Settings → Screensaver → the albums.
 
 Wholphin's own app settings (playback, theme) stay on each TV.
+
+**A Fire TV** pairs the same way: Settings → My Fire TV → Developer Options → ADB debugging on (if Developer
+Options is not there, open My Fire TV → About and press the stick's name seven times), then Pair on the Settings page
+and accept the prompt. Its
+store is Amazon's, not the Play Store: if step 2 shows no page for an app, install the app's release APK with the
+Downloader app. Fire TV Sticks that run Vega OS (not Android) cannot run Wholphin or pair.
+
+Pairing lets this Mac wake the TV, open apps and see what plays (📺 TV, "what's on TV", `mimir-tv-setup`). Watching
+in Wholphin does not need it.
 
 ## Settings
 
@@ -107,9 +134,12 @@ are files readable by you only.
   the top bar picks which TV 📺 plays on (kept on each phone); the assistant names one with `tv`. Play here plays it in the page's own player
   (picture in picture, AirPlay, the lock screen): through Jellyfin, it starts where any Jellyfin app left off, saves
   its place and played marks there (so Continue watching is the same on the TV), and goes on to the next episode after
-  a short countdown. In a title's card, ▶ Jellyfin and 📺 TV sit side by side, with Play here, My list and the rest as quiet links below. For a provider's title, ＋ Jellyfin first adds it as `.strm` files (a
-  show, a movie or a live channel); items Jellyfin has show ✓ (asked from Jellyfin's API, so something removed there
-  shows as not added). New episodes of added shows reach Jellyfin within the hour.
+  a short countdown. In a title's card, ▶ Jellyfin and 📺 TV sit side by side, with Play here, My list and the rest as quiet links below.
+- **Adding what is missing**: a provider's title has two buttons. ＋ Jellyfin adds it to the library as `.strm`
+  files (a show, a movie or a live channel); ＋ My list adds it and makes it a favourite. Jellyfin's search index is
+  read again at once, so every app finds it. A movie in another language (a dub) is its own title, named
+  "Title · Language". Items Jellyfin has show ✓ (asked from Jellyfin's API, so something removed there shows as not
+  added). New episodes of added shows reach Jellyfin within the hour.
 - **Your streaming apps**: search also finds titles on the apps you have (from TMDB, which takes JustWatch's
   data), and a title in Jellyfin or a provider shows once, with its apps. The app's button opens it: on the phone its
   link (the app opens), on the TV (or 📺 from the phone) the app itself, at its search for the title where it can.
@@ -117,11 +147,21 @@ are files readable by you only.
   gems, New on your apps) from TMDB, narrowed to your apps (or any, or some), a language, a genre, movies or shows;
   what was watched in Jellyfin is left out. A row on Home; the assistant's `recommend` tool uses the same.
 - **My list**: your Jellyfin favourites, newest first, so every Jellyfin app shows the same list. ＋ My list on any
-  title in your library; a title elsewhere goes into Jellyfin first. 👍 / 👎 on a streaming title steer
-  recommendations (👎 leaves it out everywhere).
+  title in your library; a title elsewhere goes into Jellyfin first. A ♥ marks titles on My list. Home's New
+  episodes row lists new episodes of the shows on My list only (Next up still has a show you are watching). 👍 / 👎
+  on a streaming title steer recommendations (👎 leaves it out everywhere).
+- **Into Jellyfin** (Settings): one list of the house's languages, in order, drives what goes into Jellyfin. The
+  whole catalogue of a provider (hourly, a batch of shows each run), On my apps (daily: the popular titles on your
+  streaming apps, each opening its app when played), Wholphin's home rows, one collection per language and kind, and
+  Live TV's channel groups. Posters get badges (the language, the apps), so Wholphin shows what mimir-tv shows. A
+  preview says what a change would add and send to the Trash before you save; watched, favourited and hand-added
+  titles stay.
+- **Search**: one box over Jellyfin, each provider and your streaming apps. Jellyfin's results keep only titles
+  with every word you typed.
 - **Library**: libraries, folders (everything under a folder is included), excluded subfolders (an empty
   `.ignore` file, which Jellyfin skips), single videos (linked into the library's picks folder), and live scan status.
-- **Jobs and backups**: `/jobs` lists the scheduled jobs (nightly backup, new episodes, each provider's own) with
+- **Jobs and backups**: `/jobs` lists the scheduled jobs (nightly backup and its off-site copy, new episodes, the
+  whole catalogue, On my apps, each provider's own) with
   each run, Pause and Run now. A job that fails twice in a row sends one notice through
   [jobkit](https://github.com/shrshk/jobkit): set `~/.config/jobkit/notify-url` to `openclaw:<phone>` (a push to
   the OpenClaw iPhone app, title only) or an ntfy-style URL. `scripts/restore-mac.sh` puts a backup back.
