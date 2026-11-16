@@ -36,7 +36,8 @@ git clone https://github.com/shrshk/mimir-tv && cd mimir-tv
 scripts/setup-mac.sh
 ```
 
-It installs uv and Jellyfin (Homebrew), starts mimir-tv at login (`scripts/install-mac.sh`) and opens the
+Step by step, from a new Tailscale account to Wholphin on the TV, with or without a domain:
+[docs/setup.md](docs/setup.md). In short: it installs uv and Jellyfin (Homebrew), starts mimir-tv at login (`scripts/install-mac.sh`) and opens the
 Setup page (`http://127.0.0.1:8723/setup`): what the Mac needs, then one step at a time, each skippable except
 Jellyfin:
 
