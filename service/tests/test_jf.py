@@ -75,11 +75,35 @@ PLAYED: list[tuple] = []
 TV_APP = {"Id": "tv", "Client": "Jellyfin Android TV", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
 USER_DATA: dict[str, dict] = {}  # the admin's data per item: position, played, favourite
 REPORTS: list[tuple] = []  # session reports: (event, body)
+PLAYLISTS: dict[str, dict] = {}  # the user's playlists: id -> {"Name", "items": [item ids, in order]}
+LIVE_ROOT = "/media/tv1-live"  # a provider's live channels (.strm files)
 PHONE_APP = {"Id": "phone", "Client": "Jellyfin iOS", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
 
 
 def fake(request: httpx.Request) -> httpx.Response:
     p, q = request.url.path, request.url.params
+    if p == "/Items" and q.get("IncludeItemTypes") == "Playlist":
+        assert q["userId"] == "u1"
+        return httpx.Response(
+            200, json={"Items": [{"Id": k, "Name": v["Name"], "Type": "Playlist"} for k, v in PLAYLISTS.items()]}
+        )
+    if p == "/Playlists" and request.method == "POST":
+        body = json.loads(request.content)
+        pid = f"pl{len(PLAYLISTS) + 1}"
+        PLAYLISTS[pid] = {"Name": body["Name"], "items": list(body["Ids"])}
+        return httpx.Response(200, json={"Id": pid})
+    if p.startswith("/Playlists/") and p.endswith("/Items"):
+        pl = PLAYLISTS[p.split("/")[2]]
+        if request.method == "POST":
+            pl["items"] += [i for i in q["Ids"].split(",") if i]
+            return httpx.Response(204)
+        if request.method == "DELETE":  # entries are named by their place in the list (PlaylistItemId)
+            gone = set(q["EntryIds"].split(","))
+            pl["items"] = [i for n, i in enumerate(pl["items"]) if f"entry{n}" not in gone]
+            return httpx.Response(204)
+        return httpx.Response(
+            200, json={"Items": [ITEMS[i] | {"PlaylistItemId": f"entry{n}"} for n, i in enumerate(pl["items"])]}
+        )
     if p == "/Library/MediaFolders":
         return httpx.Response(
             200,
@@ -183,6 +207,7 @@ def fake(request: httpx.Request) -> httpx.Response:
 
 def setup(tmp_path):
     USER_DATA.clear()
+    PLAYLISTS.clear()
     REPORTS.clear()
     jf = Jellyfin("http://jf", "secret-key", transport=httpx.MockTransport(fake))
     sent = []
@@ -199,7 +224,14 @@ def setup(tmp_path):
         create_app(
             jf,
             tmp_path / "picks",
-            router(jf, kodi, "https://lan.example", dates=ListDates(tmp_path / "m.db"), hidden=lambda: {"My IPTV"}),
+            router(
+                jf,
+                kodi,
+                "https://lan.example",
+                dates=ListDates(tmp_path / "m.db"),
+                hidden=lambda: {"My IPTV"},
+                live_roots=lambda: [LIVE_ROOT],
+            ),
         )
     )
     return jf, c, sent
@@ -491,6 +523,34 @@ def test_my_list_titles_in_the_library_are_jellyfin_favourites(tmp_path):
     assert not USER_DATA[MOVIE]["IsFavorite"]
     assert c.delete("/api/jf/list", params={"id": MOVIE}).status_code == 404
     assert c.delete("/api/jf/list", params={"id": "../Users"}).status_code == 422
+
+
+def test_live_channels_on_my_list_go_to_a_playlist_of_their_own(tmp_path, monkeypatch):
+    news, sports = "6" * 32, "7" * 32
+    monkeypatch.setitem(ITEMS, news, item(news, "News 24", "Video", Path=f"{LIVE_ROOT}/News 24/News 24.strm"))
+    monkeypatch.setitem(ITEMS, sports, item(sports, "Sports 1", "Video", Path=f"{LIVE_ROOT}/Sports 1/Sports 1.strm"))
+    _, c, _ = setup(tmp_path)
+    assert c.post("/api/jf/list", json={"id": news}).json() == {"added": ["News 24"], "already": []}
+    assert not USER_DATA.get(news, {}).get("IsFavorite")  # the favourites keep movies and shows
+    assert [(p["Name"], p["items"]) for p in PLAYLISTS.values()] == [("Live channels", [news])]
+    assert c.post("/api/jf/list", json={"id": news}).json() == {"added": [], "already": ["News 24"]}
+    # A live channel made a favourite in a Jellyfin app moves to the list when My list is read; an IPTV channel
+    # (Jellyfin's own Live TV, whose guide uses the favourites) and a movie stay favourites.
+    USER_DATA[sports] = {"IsFavorite": True}
+    USER_DATA["9" * 32] = {"IsFavorite": True}
+    USER_DATA[MOVIE] = {"IsFavorite": True}
+    listed = c.get("/api/jf/list").json()
+    assert sorted((i["title"], i["live"]) for i in listed) == [
+        ("NDTV 24x7", False),
+        ("News 24", True),
+        ("Sports 1", True),
+        ("Wedding Film 4K", False),
+    ]
+    assert not USER_DATA[sports]["IsFavorite"] and USER_DATA["9" * 32]["IsFavorite"]
+    assert list(PLAYLISTS.values())[0]["items"] == [news, sports]
+    assert c.delete("/api/jf/list", params={"id": news}).status_code == 204
+    assert list(PLAYLISTS.values())[0]["items"] == [sports]
+    assert c.delete("/api/jf/list", params={"id": news}).status_code == 404
 
 
 def test_my_list_shows_the_last_favourite_first_wherever_it_was_made(tmp_path, monkeypatch):

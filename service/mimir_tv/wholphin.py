@@ -10,6 +10,7 @@ wholphin_rows off leaves Wholphin's own home alone. Rows use the tags mirror.py 
 import json
 
 from mimir_tv.jellyfin import Jellyfin
+from mimir_tv.mylist import LIVE_LIST
 from mimir_tv.onapps import LIBRARY, TRENDING
 from mimir_tv.streaming import pick
 
@@ -54,6 +55,8 @@ def rows(
             jf._call("GET", "/Items", {"IncludeItemTypes": "Playlist", "Recursive": "true", "userId": jf.user()}) or {}
         ).get("Items", [])
     }
+    if LIVE_LIST in lists:  # the live channels on My list (a playlist of their own, jf_routes.py)
+        out.append({"type": "ByParent", "parentId": lists[LIVE_LIST], "recursive": False})
     # mimir-tv's own rows for the apps, same names and order (onapps.playlists); a playlist row reads its order.
     for name in [TRENDING] + [f"Popular on {app}" for app in apps] if apps_lib else []:
         if name in lists:

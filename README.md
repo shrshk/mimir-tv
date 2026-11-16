@@ -149,7 +149,9 @@ are files readable by you only.
   gems, New on your apps) from TMDB, narrowed to your apps (or any, or some), a language, a genre, movies or shows;
   what was watched in Jellyfin is left out. A row on Home; the assistant's `recommend` tool uses the same.
 - **My list**: your Jellyfin favourites, newest first, so every Jellyfin app shows the same list. ＋ My list on any
-  title in your library; a title elsewhere goes into Jellyfin first. A ♥ marks titles on My list. Home's New
+  title in your library; a title elsewhere goes into Jellyfin first. A provider's live channels go on a list of
+  their own instead: the Jellyfin playlist "Live channels" (a row on Home and in Wholphin), so the favourites keep
+  movies and shows; one made a favourite in a Jellyfin app moves there. A ♥ marks titles on My list. Home's New
   episodes row lists new episodes of the shows on My list only (Next up still has a show you are watching). 👍 / 👎
   on a streaming title steer recommendations (👎 leaves it out everywhere).
 - **Into Jellyfin** (Settings): one list of the house's languages, in order, drives what goes into Jellyfin. The

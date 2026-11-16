@@ -19,7 +19,7 @@ from starlette.background import BackgroundTask
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
 from mimir_tv.kodi import Kodi, KodiError
 from mimir_tv.tv import Tvs, TvError, aimed, tv_address
-from mimir_tv.mylist import ListDates
+from mimir_tv.mylist import LIVE_LIST, ListDates
 
 FOLDERS = {"CollectionFolder", "Folder", "Series", "Season", "BoxSet", "UserView", "PhotoAlbum"}
 PLAYABLE = {"Movie", "Episode", "Video", "MusicVideo"}
@@ -140,9 +140,11 @@ def router(
     play_app=None,
     phone_app: Callable[[], str] = lambda: "swiftfin",
     tvs: Tvs | None = None,
+    live_roots: Callable[[], list[str]] = list,
 ) -> APIRouter:
     """hidden: the providers' own libraries, shown in each provider's section instead of Your library. tvs: the TVs
-    in Settings, so a play can name one (open_app and play_app then take its address as tv=)."""
+    in Settings, so a play can name one (open_app and play_app then take its address as tv=). live_roots: the
+    folders of the providers' live channels (their .strm files), whose channels go on My list's own playlist."""
     api = APIRouter()
 
     def guard(fn, *args):
@@ -289,29 +291,59 @@ def router(
         return card(n) if n else {}
 
     # My list is the user's Jellyfin favourites: one list for every Jellyfin app (mylist.py).
+    def live(i: dict) -> bool:
+        """A provider's live channel (Jellyfin's own Live TV channels stay favourites: its guide reads them)."""
+        path = i.get("Path") or ""
+        return any(path.startswith(root.rstrip("/") + "/") for root in live_roots())
+
+    def live_list() -> tuple[str, list[dict]]:
+        pid = guard(jf.playlist, LIVE_LIST)
+        return pid, guard(jf.playlist_items, pid) if pid else []
+
     @api.get("/api/jf/list")
     def listed():
-        """Newest on My list first (added: when, in seconds)."""
+        """Newest on My list first (added: when, in seconds; live: in the Live channels playlist). A live channel
+        made a favourite in a Jellyfin app moves to that playlist here."""
         found = {i["Id"]: i for i in guard(jf.favourites)}
-        library = {i: since(x.get("DateCreated")) for i, x in found.items()}
+        pid, channels = live_list()
+        for i in [x for x in found.values() if live(x)]:
+            if i["Id"] not in {c["Id"] for c in channels}:
+                guard(jf.add_to_playlist, LIVE_LIST, i["Id"])
+                channels.append(i)
+            guard(jf.set_favourite, i["Id"], False)
+            del found[i["Id"]]
+        everything = {i["Id"]: (i, False) for i in found.values()} | {c["Id"]: (c, True) for c in channels}
+        library = {i: since(x.get("DateCreated")) for i, (x, _) in everything.items()}
         added = dates.added(library) if dates else library
-        return sorted((card(x) | {"added": added[i]} for i, x in found.items()), key=lambda c: -c["added"])
+        cards = (card(x) | {"added": added[i], "live": on} for i, (x, on) in everything.items())
+        return sorted(cards, key=lambda c: -c["added"])
 
     @api.post("/api/jf/list", status_code=201)
     def add_to_list(body: Play):
-        found = card(guard(jf.item, body.id))
-        if guard(jf.user_data, body.id).get("IsFavorite"):
+        item = guard(jf.item, body.id)
+        found = card(item)
+        if live(item):
+            if any(c["Id"] == body.id for c in live_list()[1]):
+                return {"added": [], "already": [found["title"]]}
+            guard(jf.add_to_playlist, LIVE_LIST, body.id)
+        elif guard(jf.user_data, body.id).get("IsFavorite"):
             return {"added": [], "already": [found["title"]]}
-        guard(jf.set_favourite, body.id, True)
+        else:
+            guard(jf.set_favourite, body.id, True)
         if dates:
             dates.favourite(body.id, True)
         return {"added": [found["title"]], "already": []}
 
     @api.delete("/api/jf/list", status_code=204)
     def remove_from_list(id: str = Query(pattern=ID)):
-        if not guard(jf.user_data, id).get("IsFavorite"):
+        pid, channels = live_list()
+        entries = [c["PlaylistItemId"] for c in channels if c["Id"] == id]
+        if entries:
+            guard(jf.remove_from_playlist, pid, entries)
+        elif guard(jf.user_data, id).get("IsFavorite"):
+            guard(jf.set_favourite, id, False)
+        else:
             raise HTTPException(404, "not on My list")
-        guard(jf.set_favourite, id, False)
         if dates:
             dates.favourite(id, False)
 

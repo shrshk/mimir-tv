@@ -1,13 +1,15 @@
 """My list is the user's Jellyfin favourites: one list for every Jellyfin app (jf_routes.py). Jellyfin keeps no date
 for a favourite, so mimir-tv notes when it first saw each one, to show the newest first. That is all it keeps.
 
-Picks from an assistant that are not in the library stay with the assistant (mimir-claw keeps its own list)."""
+Picks from an assistant that are not in the library stay with the assistant (mimir-claw keeps its own list). A
+provider's live channels on My list are in a Jellyfin playlist of their own (LIVE_LIST), not the favourites."""
 
 import sqlite3
 import threading
 import time
 from pathlib import Path
 
+LIVE_LIST = "Live channels"  # the providers' live channels on My list: a Jellyfin playlist, apart from the favourites
 FAVOURITES = "CREATE TABLE IF NOT EXISTS favourites (id TEXT PRIMARY KEY, added REAL NOT NULL)"  # '' marks a look
 
 

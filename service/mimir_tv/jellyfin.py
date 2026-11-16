@@ -90,7 +90,7 @@ class Jellyfin:
         return None
 
     # Browsing, and the fallback player (the page never calls Jellyfin's API itself).
-    FIELDS = "Overview,ProductionYear,RunTimeTicks,MediaSources,UserData,ChildCount"
+    FIELDS = "Overview,ProductionYear,RunTimeTicks,MediaSources,UserData,ChildCount,Path"
 
     def views(self) -> list[dict]:
         return (self._call("GET", "/Library/MediaFolders") or {}).get("Items", [])
@@ -343,6 +343,29 @@ class Jellyfin:
             }
             out += [i["Path"] for i in (self._call("GET", "/Items", params) or {}).get("Items", []) if i.get("Path")]
         return out
+
+    def playlist(self, name: str) -> str:
+        """The user's playlist with this name: its id, or "" when there is none."""
+        params = {"IncludeItemTypes": "Playlist", "Recursive": "true", "userId": self.user()}
+        found = (self._call("GET", "/Items", params) or {}).get("Items", [])
+        return next((p["Id"] for p in found if p.get("Name") == name), "")
+
+    def playlist_items(self, playlist_id: str) -> list[dict]:
+        """In the playlist's order, each with its PlaylistItemId (what removing it takes)."""
+        params = {"userId": self.user(), "Fields": self.FIELDS + ",DateCreated"}
+        return (self._call("GET", f"/Playlists/{playlist_id}/Items", params) or {}).get("Items", [])
+
+    def add_to_playlist(self, name: str, item_id: str) -> None:
+        """At the end of the user's playlist with this name, made when missing."""
+        pid = self.playlist(name)
+        if pid:
+            self._call("POST", f"/Playlists/{pid}/Items", {"Ids": item_id, "UserId": self.user()})
+        else:
+            body = {"Name": name, "Ids": [item_id], "UserId": self.user(), "MediaType": "Video"}
+            self._call("POST", "/Playlists", None, body)
+
+    def remove_from_playlist(self, playlist_id: str, entry_ids: list[str]) -> None:
+        self._call("DELETE", f"/Playlists/{playlist_id}/Items", {"EntryIds": ",".join(entry_ids)})
 
     def set_favourite(self, item_id: str, on: bool) -> None:
         self._call("POST" if on else "DELETE", f"/UserFavoriteItems/{item_id}", {"userId": self.user()})

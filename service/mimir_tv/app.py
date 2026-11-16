@@ -36,7 +36,7 @@ from mimir_tv.recs import Recs
 from mimir_tv.recs import router as recs_router
 from mimir_tv.resolver import start_resolver
 from mimir_tv.catalog import CatalogError, Catalogs
-from mimir_tv.catalog_routes import hidden_libraries, listing, plugin_paths
+from mimir_tv.catalog_routes import hidden_libraries, listing, plugin_paths, roots
 from mimir_tv.catalog_routes import router as catalog_router
 from mimir_tv import backup
 from mimir_tv import jobs as app_jobs
@@ -411,6 +411,7 @@ def main() -> None:
             play_app=play_app,
             phone_app=lambda: settings.load(config)["phone_app"],
             tvs=tvs,
+            live_roots=lambda: [str(roots(media_root, entry["id"])["live"]) for entry, _ in catalogs.all()],
         )
     ]
     # Where titles stream, filtered to the house's apps: TMDB, with its API Read Access Token (from your password manager) in

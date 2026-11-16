@@ -1079,7 +1079,9 @@ async function home() {
     if (left.length) html += head(title) + strip(left);
   }
   if (recs.items.length) html += head("Worth the hype on your apps", "__recs") + strip(recs.items.map(recTile));
-  if (list.length) html += head("My list", "__list") + strip(list);
+  const titles = list.filter(i => !i.live), channels = list.filter(i => i.live);
+  if (titles.length) html += head("My list", "__list") + strip(titles);
+  if (channels.length) html += head("Live channels", "__list") + strip(channels);
   if (trending.length) html += head("Trending on your apps") + strip(trending);
   for (const a of apps) html += head(`Popular on ${a.name}`) + strip(a.items);
   if (mine.items.length) html += head("Your library") + strip(mine.items);
@@ -1174,10 +1176,12 @@ async function forYou(change) {
 
 async function myList() {
   crumbs = [{title: "My list", node: "__list"}]; renderTrail();
-  const list = await loadList(); pool = [];
+  // Live channels have a list of their own (a Jellyfin playlist, apart from the favourites): after the titles.
+  const all = await loadList(), list = [...all.filter(i => !i.live), ...all.filter(i => i.live)]; pool = [];
   current = {node: "__list", title: "My list", items: list, videos: []};
   document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x.dataset.tab === "list"));
-  $("#grid").innerHTML = list.length ? list.map(i => tile(i)).join("")
+  const liveHead = `<h3 class="full" style="margin:14px 0 2px">Live channels</h3>`;
+  $("#grid").innerHTML = list.length ? list.map((i, n) => (i.live && !(list[n - 1] || {}).live ? liveHead : "") + tile(i)).join("")
     : `<div class="full mute" style="margin-top:8px">Nothing saved yet. Use ＋ My list on a title in Jellyfin to keep it here. It shows in every Jellyfin app too.</div>`;
   // Remove in one tap: ✕ on each poster.
   $("#grid").querySelectorAll(".tile").forEach((t, n) => {

@@ -41,6 +41,7 @@ class FakeJellyfin:
             lists = [
                 {"Name": "Popular on Netflix", "Id": "pl-netflix"},
                 {"Name": "Trending on your apps", "Id": "pl-trend"},
+                {"Name": "Live channels", "Id": "pl-live"},  # My list's live channels (jf_routes.py)
             ]
             return httpx.Response(200, json={"Items": lists})
         if path == "/Items":
@@ -71,7 +72,7 @@ def test_wholphins_home_is_laid_out_by_language_and_kind_in_the_users_order():
         "wholphin_channels": ["channel one", "Nowhere"],
         "streaming_apps": "netflix,peacock",  # Peacock has nothing in On my apps: no row
     }
-    assert wholphin.home(jf, "My TV", "My TV Movies", cfg) == "9 rows written"
+    assert wholphin.home(jf, "My TV", "My TV Movies", cfg) == "10 rows written"
 
     saved = json.loads(fake.prefs["CustomPrefs"]["home_settings"])
     assert saved["version"] == 1 and fake.prefs["CustomPrefs"]["other"] == "kept" and fake.prefs["SortBy"] == "SortName"
@@ -79,10 +80,11 @@ def test_wholphins_home_is_laid_out_by_language_and_kind_in_the_users_order():
         r.get("name") or r.get("parentId") if r["type"] == "ByParent" else r.get("name") or r["type"]
         for r in saved["rows"]
     ]
-    # Continue watching first, then the apps, then languages in the order asked; a kind with nothing in it is left out; English shows have no kind, so one row;
+    # Continue watching first, then the live channels on My list, then the apps, then languages in the order asked; a kind with nothing in it is left out; English shows have no kind, so one row;
     # an unknown channel is left out; new episodes last.
     assert names == [
         "ContinueWatchingCombined",
+        "pl-live",
         "pl-trend",
         "pl-netflix",
         "Telugu TV serials",
@@ -92,12 +94,12 @@ def test_wholphins_home_is_laid_out_by_language_and_kind_in_the_users_order():
         "English movies",
         "Channel One",
     ]
-    serials = saved["rows"][3]["filter"]
+    serials = saved["rows"][4]["filter"]
     assert serials["tags"] == ["Telugu · TV serial"] and serials["parentId"] == SHOWS
     assert serials["includeItemTypes"] == ["Series"] and serials["sortBy"] == ["DateCreated"]
     # The apps' rows are mimir-tv's own lists: trending first, then each app (Peacock has none: no row).
-    assert saved["rows"][1] == {"type": "ByParent", "parentId": "pl-trend", "recursive": False}
-    assert saved["rows"][8]["filter"]["studioIds"] == ["st1"]
+    assert saved["rows"][2] == {"type": "ByParent", "parentId": "pl-trend", "recursive": False}
+    assert saved["rows"][9]["filter"]["studioIds"] == ["st1"]
 
     # The same layout again is not written again.
     assert wholphin.home(jf, "My TV", "My TV Movies", cfg).endswith("unchanged") and fake.posts == 1
