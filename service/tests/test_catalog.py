@@ -419,16 +419,20 @@ def test_files_already_there_are_left_alone(tmp_path):
     assert target.stat().st_mtime == 1 and "p=" not in target.read_text()
 
 
-def test_hourly_jobs_record_each_run_under_the_providers_id(home, cat, tmp_path):
+def test_hourly_jobs_record_each_run_under_the_providers_id(home, cat, tmp_path, monkeypatch):
     root = tmp_path / "media" / "tv1"
     write_show(cat, "tv1", SHOW, "Dark", root, "http://air:8724")
     follow(root, "Dark", SHOW)
     jobs = Jobs(tmp_path / "mimir-tv.db", "mimir-tv")
     app_jobs.define(jobs)
     fake = FakeJellyfin()
+    fake.libs["My TV"] = {"Name": "My TV", "ItemId": "id-My TV", "Locations": [str(root)]}
     jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(fake.handler))
     cat.pages[S2] = [video("Episode 2. New", EP.format(s=2, e=2)), *cat.pages[S2]]
+    monkeypatch.setattr(app_jobs, "REINDEX_AFTER", 0)
     assert app_jobs.new_episodes(jobs, home, jf, tmp_path / "media", "http://air:8724") == 1
+    app_jobs.REINDEX["timer"].join(5)
+    assert fake.scans and fake.reindexed == 1  # search finds the new episodes once Jellyfin's scan is through, not the next day
     down = Jellyfin("http://jf", "k", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
     cat.pages[S2] = [video("Episode 3. Newer", EP.format(s=2, e=3)), *cat.pages[S2]]
     with pytest.raises(JellyfinError):
@@ -663,8 +667,12 @@ def test_the_whole_catalogue_goes_into_jellyfin_a_batch_of_shows_at_a_time(home,
     assert (shows_root / "Dark/Season 02/Dark S02E01 - Truth.strm").exists()
     assert f"{SITE}/mine" not in cat.fetched
     # The job takes the rest (never written first), makes the libraries Jellyfin did not have, and says what is left.
+    monkeypatch.setattr(app_jobs, "REINDEX_AFTER", 0)
+    reindexed = fake.reindexed
     summary = app_jobs.whole_catalogue(jobs, home, jf, media, air)
     assert summary == "My TV: 0 movies, 1 shows (1 episodes), 1 failed, 1 details and 0 posters, 1 shows waiting"
+    app_jobs.REINDEX["timer"].join(5)
+    assert fake.reindexed == reindexed + 1  # what it wrote is found by search within minutes
     assert (shows_root / "DARK (2)/Season 01/DARK (2) S01E01.strm").exists()
     assert fake.libs["My TV"]["Locations"] == [str(shows_root)] and fake.libs["My TV"]["CollectionType"] == "tvshows"
 

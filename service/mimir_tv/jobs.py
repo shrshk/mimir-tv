@@ -2,6 +2,7 @@
 GET /api/jobs."""
 
 import sqlite3
+import threading
 from pathlib import Path
 
 import httpx
@@ -23,6 +24,28 @@ WHOLE_CATALOGUE = "whole-catalogue"
 TRASH = Path.home() / ".Trash"  # where titles outside the whole catalogue's limit go (mirror.prune)
 ON_MY_APPS = "on-my-apps"
 
+# Jellyfin's search index (the Meilisearch plugin) re-reads the library on its own only after a full scan (nightly),
+# so a job that wrote titles has it re-read a few minutes later: Jellyfin's scan of one library gives no sign when it
+# is through, and is done well within this. One wait at a time; a re-read takes seconds.
+REINDEX_AFTER = 300  # seconds
+REINDEX: dict = {"timer": None}
+
+
+def reindex_soon(jf: Jellyfin) -> None:
+    pending = REINDEX["timer"]
+    if pending is not None and pending.is_alive():
+        return
+
+    def go():
+        try:
+            jf.reindex_search()
+        except JellyfinError as e:
+            print("search reindex failed:", e)
+
+    REINDEX["timer"] = threading.Timer(REINDEX_AFTER, go)
+    REINDEX["timer"].daemon = True
+    REINDEX["timer"].start()
+
 
 def define(jobs: Jobs) -> None:
     jobs.define(NEW_EPISODES, "New episodes: added shows into Jellyfin", "hourly")
@@ -42,6 +65,7 @@ def new_episodes(jobs: Jobs, catalogs: Catalogs, jf: Jellyfin, media_root: Path,
                 lib = next((x for x in jf.libraries() if x["Name"] == libraries(entry)["shows"]), None)
                 if lib:
                     jf.scan(lib.get("ItemId"))
+                    reindex_soon(jf)
             found += new
         run.summary = f"{found} new episode{'s' if found != 1 else ''}"
         return found
@@ -117,6 +141,8 @@ def whole_catalogue(
                         )
                 except JellyfinError as e:  # the titles are in; the layout is tried again next run
                     notes.append(f"Wholphin home and collections not updated: {e}")
+        if notes:  # every run: also catches what an earlier scan was still reading
+            reindex_soon(jf)
         run.summary = "; ".join(notes) or "no provider has the whole catalogue turned on"
         return run.summary
 
@@ -140,6 +166,7 @@ def on_my_apps(jobs: Jobs, streaming, jf: Jellyfin, media_root: Path, base: str,
             jf.create_library(onapps.LIBRARY, "movies", [str(root)])
         elif done["new"] or done["removed"] or done["posters"]:
             jf.scan(lib.get("ItemId"))
+            reindex_soon(jf)
         lists = onapps.playlists(streaming, jf, root)
         run.summary = (
             f"{done['titles']} titles ({done['new']} new, {done['removed']} removed), {lists} app lists updated"
