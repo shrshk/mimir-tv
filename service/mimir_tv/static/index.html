@@ -596,6 +596,10 @@ const jfOpen = (id, label, play) => appIds
 function playInApp(id) {
   fetch("/api/jf/phone", {method: "POST", keepalive: true, headers: {"Content-Type": "application/json"}, body: JSON.stringify({id})}).catch(() => {});
 }
+// A title's Google page: its panel with cast, ratings, reviews and where to watch. In the Home Screen app the link
+// stays in the same window, so iOS opens it in a browser sheet over the app (Done comes back, the compass opens it in
+// Safari); in a browser tab it opens a new tab. Not on the TV. A dub's " · Language" is left out of the search.
+const googleLink = (title, show) => TV ? "" : `<a class="alt" href="https://www.google.com/search?q=${enc(title.replace(/\s*·\s*[^·]+$/, "") + (show ? " TV series" : ""))}"${navigator.standalone ? "" : ` target="_blank" rel="noopener"`}>Google ↗</a>`;
 function actions(v, k, ctx) {
   // A streaming title: its apps; in a sheet also 👍/👎 (recommendations learn from them).
   if (v.tmdb) return appButtons(v) + (ctx === "sheet" ? voteBtns(v) : "");
@@ -707,7 +711,7 @@ function videoSheet(v) {
   const close = `<button class="icon close" onclick="$('#dlg').close()" aria-label="Close">✕</button>`;
   $("#dlgbody").innerHTML = (v.thumb ? `<div class="banner"><img src="${v.thumb}" alt="">${close}</div>` : `<div class="grab"></div><div class="row" style="justify-content:flex-end;padding:6px 8px 0">${close}</div>`)
     + `<div class="body"><h2>${esc(v.title)}</h2>${v.sub ? `<div class="mute">${esc(v.sub)}</div>` : ""}${v.desc ? `<p class="desc">${esc(v.desc)}</p>` : ""}
-      <div class="row acts">${actions(v, 0, "sheet")}${v.show ? `<button class="alt" data-show>Go to show ›</button>` : v.id && v.type === "Movie" && current.node !== "jfmovie:" + v.id ? `<button class="alt" data-show>Go to movie ›</button>` : ""}</div></div>`;
+      <div class="row acts">${actions(v, 0, "sheet")}${v.show ? `<button class="alt" data-show>Go to show ›</button>` : v.id && v.type === "Movie" && current.node !== "jfmovie:" + v.id ? `<button class="alt" data-show>Go to movie ›</button>` : ""}${googleLink(v.show_title || v.title, !!(v.show_title || v.episodic))}</div></div>`;
   // An episode (Next up, Continue watching): its show's page, with the seasons and the other episodes; a movie: its
   // own page.
   const toShow = $("#dlgbody [data-show]");
@@ -818,7 +822,7 @@ async function open(node, title, push = true) {
     current = {node, title: title || d.title, items: d.items, jf: jfNode, jf_id: d.jf_id || "", inJf: !!d.jf_id || (videos.length > 0 && videos.every(v => v.jf_id))};
     const isShow = videos.length || (folders.length && folders.every(f => /season|part|volume/i.test(f.title)));
     let html = "";
-    if (isShow && node && !jfNode && episodicShow(d.items)) html += `<div class="showbar">${d.items[0] && d.items[0].desc ? `<div class="mute">${esc(d.items[0].desc)}</div>` : ""}<div class="row big">${current.jf_id && !TV ? jfOpen(current.jf_id, "▶ Show in Jellyfin") : current.jf_id || current.inJf ? "" : `<button class="p" onclick="openShow()">＋ Add show to Jellyfin</button><button class="lb" onclick="openShow(true)">＋ My list</button>`}${showSave()}${appButtons({title: current.title, ...(shows[node] || {})})}</div></div>`;
+    if (isShow && node && !jfNode && episodicShow(d.items)) html += `<div class="showbar">${d.items[0] && d.items[0].desc ? `<div class="mute">${esc(d.items[0].desc)}</div>` : ""}<div class="row big">${current.jf_id && !TV ? jfOpen(current.jf_id, "▶ Show in Jellyfin") : current.jf_id || current.inJf ? "" : `<button class="p" onclick="openShow()">＋ Add show to Jellyfin</button><button class="lb" onclick="openShow(true)">＋ My list</button>`}${showSave()}${appButtons({title: current.title, ...(shows[node] || {})})}${googleLink(current.title, true)}</div></div>`;
     if (jfNode && d.desc) html += `<div class="showbar"><div class="mute">${esc(d.desc)}</div></div>`;
     html += folders.map(f => tile(f, f.sub)).join("");
     current.episodic = !jfNode && videos.some(v => /episode|\bep\s*\d/i.test(v.title));
