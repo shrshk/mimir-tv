@@ -2,7 +2,6 @@
 (Jellyfin 10.11+ rejects the old X-Emby-Authorization header)."""
 
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 
@@ -110,27 +109,19 @@ class Jellyfin:
     # Not folders (Wholphin leaves them out too): each live channel's .strm sits in a folder of its own, a twin.
     SEARCHED = ("Movie", "Series", "Episode", "BoxSet", "TvChannel", "Video", "MusicVideo", "Playlist")
 
-    def search(self, q: str, limit: int = 50) -> list[dict]:
-        """Up to `limit` of each kind (SEARCHED) whose name Jellyfin matches, in parallel; a kind Jellyfin fails
-        to search is left out."""
-        user = self.user()  # without a user Jellyfin leaves out Live TV's channels
-
-        def one(kind: str) -> list[dict]:
-            params = {
-                "SearchTerm": q,
-                "Recursive": "true",
-                "Limit": str(limit),
-                "Fields": self.FIELDS,
-                "IncludeItemTypes": kind,
-                "userId": user,
-            }
-            try:
-                return (self._call("GET", "/Items", params) or {}).get("Items", [])
-            except JellyfinError:
-                return []
-
-        with ThreadPoolExecutor(max_workers=len(self.SEARCHED)) as pool:
-            return [i for found in pool.map(one, self.SEARCHED) for i in found]
+    def search(self, q: str, limit: int = 200) -> list[dict]:
+        """Items of every kind searched (SEARCHED) whose name Jellyfin matches: one Jellyfin search, which mimir-tv
+        then sorts into Wholphin's rows. (A search a kind, as Wholphin does, was eight at once: with a slow search
+        index they piled up until Jellyfin stopped answering.)"""
+        params = {
+            "SearchTerm": q,
+            "Recursive": "true",
+            "Limit": str(limit),
+            "Fields": self.FIELDS,
+            "IncludeItemTypes": ",".join(self.SEARCHED),
+            "userId": self.user(),  # without a user Jellyfin leaves out Live TV's channels
+        }
+        return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
     def programmes(self, q: str, hours: int = 24, limit: int = 200) -> list[dict]:
         """The TV guide's programmes matching the search (loosely) that are on now or start within `hours`."""

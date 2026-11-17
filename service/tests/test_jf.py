@@ -83,6 +83,7 @@ PLAYED: list[tuple] = []
 TV_APP = {"Id": "tv", "Client": "Jellyfin Android TV", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
 USER_DATA: dict[str, dict] = {}  # the admin's data per item: position, played, favourite
 REPORTS: list[tuple] = []  # session reports: (event, body)
+SEARCHED: list[str] = []  # each search Jellyfin was asked (its term)
 PROGRAMMES: list[dict] = []  # the TV guide's programmes (Jellyfin's Live TV, from an XMLTV source)
 PLAYLISTS: dict[str, dict] = {}  # the user's playlists: id -> {"Name", "items": [item ids, in order]}
 LIVE_ROOT = "/media/tv1-live"  # a provider's live channels (.strm files)
@@ -169,6 +170,7 @@ def fake(request: httpx.Request) -> httpx.Response:
     if p == "/Shows/NextUp":
         return httpx.Response(500, text="boom") if NEXT_UP is None else httpx.Response(200, json={"Items": NEXT_UP})
     if p == "/Items" and "SearchTerm" in q:  # loose, as Jellyfin's is: any one word of the search is enough
+        SEARCHED.append(q["SearchTerm"])
         words = [w for w in re.split(r"\W+", q["SearchTerm"].lower()) if len(w) > 1]
         named = lambda i: f"{i['Name']} {i.get('SeriesName', '')}".lower()  # noqa: E731
         # Like Jellyfin: asked without a user, Live TV's channels are left out.
@@ -815,6 +817,11 @@ def test_search_is_wholphins_a_group_per_kind_closest_names_first_and_spelling_s
         ("BoxSet", "Dark Shows"),
     ]
     assert search("telgu news") == [("TvChannel", "Telugu News")]  # a letter left out, as Jellyfin forgives
+    # One Jellyfin search a query, sorted into rows here: a search a kind (eight at once) piled up in a slow search
+    # index until Jellyfin stopped answering anything.
+    SEARCHED.clear()
+    search("dark")
+    assert SEARCHED == ["dark"]
     assert search("drak") == []  # a short word is not guessed at
 
 
