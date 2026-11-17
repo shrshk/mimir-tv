@@ -198,6 +198,15 @@
   .pills { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 4px; }
   .pills span { font-size:12px; color:var(--mute); background:#ffffff12; border-radius:12px; padding:3px 10px; }
   .ov3 { grid-column:1/-1; color:var(--mute); font-size:14px; margin:4px 0 0; }
+  /* A show's episodes (Wholphin's list): a still or a numbered box, name, length and state, two lines of overview */
+  .epl { grid-column:1/-1; display:flex; flex-direction:column; gap:14px; margin-top:12px; }
+  .epi { display:flex; gap:12px; cursor:pointer; }
+  .epi .img { width:150px; aspect-ratio:16/9; border-radius:8px; background:#ffffff10 center/cover; flex:none; position:relative; overflow:hidden;
+              display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:var(--dim); }
+  .epi .img .b { position:absolute; left:0; right:0; bottom:0; height:3px; background:#0006; } .epi .img .b i { display:block; height:100%; background:var(--accent); }
+  .epi .t { font-size:14px; font-weight:600; } .epi .s { font-size:12px; color:var(--dim); margin:2px 0; }
+  .epi .o { font-size:12px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .epi.seen .t { color:var(--mute); }
   .wh .row a.alt:has(.gico) { width:42px; height:42px; padding:0; border-radius:50%; background:#ffffff1a; display:inline-flex; align-items:center;
                               justify-content:center; color:var(--ink); }
   .wh .row .gico { border:0; font-size:16px; }
@@ -611,6 +620,7 @@ function tile(i, sub, wide) {
   // Where it plays: the house's apps, and the provider for its results (both when its title is on an app too).
   const badges = (i.apps || []).map(a => `<b class="${esc(a.app)}">${esc(a.name)}</b>`).concat(i.src ? [`<b class="prov">${esc(i.src)}</b>`] : []);
   const apps = badges.length ? `<span class="apps">${badges.join("")}</span>` : "";
+  if (i.type === "Series" && i.id && (i.node || "").startsWith("jf:")) i.node = "jfshow:" + i.id;  // its Wholphin page
   if (i.kind === "folder" && i.node) shows[i.node] = {thumb: i.thumb || "", sub: i.sub || "", apps: i.apps, tmdbRef: i.tmdbRef, tmdbTitle: i.tmdbTitle};  // for the app buttons on its page
   const jf = i.id || i.jf_id, key = jf ? `jf:${jf}` : "";
   return `<div class="tile${wide ? " wide" : ""}" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
@@ -805,7 +815,7 @@ function videoSheet(v) {
       <div class="row acts">${actions(v, 0, "sheet")}${googleLink(v.show_title || v.title, !!(v.show_title || v.episodic))}</div></div>`;
   // An episode (Next up, Continue watching): its show's page, with the seasons and the other episodes; a movie: its
   // own page.
-  const toShow = () => { $("#dlg").close(); v.show ? open(v.show, v.show_title) : open("jfmovie:" + v.id, v.title); };
+  const toShow = () => { $("#dlg").close(); v.show ? open(v.show.replace(/^jf:/, "jfshow:"), v.show_title) : open("jfmovie:" + v.id, v.title); };
   document.querySelectorAll("#dlgbody [data-show]").forEach(el => {
     el.onclick = toShow;
     el.onkeydown = e => { if (e.key === "Enter") toShow(); };
@@ -912,6 +922,7 @@ async function open(node, title, push = true) {
     if (node === "__list") return myList();
     if (node.startsWith("jfmovie:")) return moviePage(node.slice(8));
     if (node.startsWith("jfperson:")) return personPage(node.slice(9));
+    if (node.startsWith("jfshow:")) return showPage(node.slice(7));
     const jfNode = node.startsWith("jf:");
     const d = jfNode ? await api("/api/jf/browse?id=" + enc(node.slice(3))) : await api(P(pidOf(node)) + "/browse?node=" + enc(node));
     const folders = d.items.filter(i => i.kind === "folder"), videos = d.items.filter(i => i.kind === "video");
@@ -953,6 +964,37 @@ async function personPage(id) {
   $("#grid").innerHTML = `<div class="people">${personBtn({id: p.id, name: "", thumb: p.thumb})}<div style="align-self:center"><h2 style="margin:0">${esc(p.name)}</h2><div class="mute">${p.items.length} title${p.items.length === 1 ? "" : "s"} in Jellyfin</div></div></div>`
     + (p.items.length ? p.items.map(i => tile(i)).join("") : `<div class="full mute">Nothing with ${esc(p.name)} in Jellyfin yet.</div>`);
   bindTiles(true);
+}
+
+// A show, as Wholphin's: the header's main button plays the next episode, then season tabs and the episodes.
+let showSeason = {};  // the season picked on each show's page
+async function showPage(id) {
+  const m = await api("/api/jf/show/" + enc(id));
+  pool = [];
+  current = {node: "jfshow:" + id, title: m.title, items: [], videos: m.episodes, jf: true, jf_id: m.id};
+  const next = m.next, code = e => `S${e.season || e.sub.match(/S(\d+)/)?.[1] || 1}E${e.n || ""}`;
+  const nextEp = next && m.episodes.find(e => e.id === next.id);
+  let html = whHead(m, (next ? jfOpen(next.id, `▶ ${next.progress ? "Resume" : "Play"} ${nextEp ? `S${nextEp.season} E${nextEp.n}` : ""}`.trim(), true)
+    + `<button class="round" title="Play on the TV" aria-label="Play on the TV" onclick="go('tv',0,2)">📺</button>` : "")
+    + heartBtn({jf: m.id, title: m.title}) + googleLink(m.title, true), true);
+  if (next) headCtx = {title: m.title, videos: [next], jf: true};  // the header's buttons play the next episode
+  if (m.desc) html += `<p class="ov3">${esc(m.desc)}</p>`;
+  const seasons = [...new Set(m.episodes.map(e => e.season))].sort((a, b) => a - b);
+  const pick = seasons.includes(showSeason[id]) ? showSeason[id] : nextEp ? nextEp.season : seasons[0];
+  if (seasons.length > 1) {
+    const name = n => (m.seasons.find(x => x.n === n) || {}).name || (n ? `Season ${n}` : "Specials");
+    html += `<div class="chips line">${seasons.map(n => `<button class="chip${n === pick ? " on" : ""}" data-season="${n}">${esc(name(n))}</button>`).join("")}</div>`;
+  }
+  const week = Date.now() - 7 * 864e5;
+  html += `<div class="epl">${m.episodes.map((e, k) => e.season !== pick ? "" : `<div class="epi${e.played ? " seen" : ""}" data-k="${k}">`
+    + `<div class="img"${e.wide ? ` style="background-image:url('${e.wide}')"` : ""}>${e.wide ? "" : e.n || ""}${e.progress ? `<div class="b"><i style="width:${e.progress}%"></i></div>` : ""}</div>`
+    + `<div><div class="t">${e.n ? `${e.n}. ` : ""}${esc(e.title.replace(/^.* S\d+E\d+( - )?/, "") || e.title)}</div>`
+    + `<div class="s">${esc([e.minutes ? `${e.minutes} min` : "", e.played ? "watched" : leftOf(e), !e.played && Date.parse(e.added || "") > week ? "new" : ""].filter(Boolean).join(" · "))}</div>`
+    + (e.desc ? `<div class="o">${esc(e.desc)}</div>` : "") + `</div></div>`).join("")}</div>`;
+  $("#grid").innerHTML = html;
+  $("#grid").querySelectorAll("[data-season]").forEach(b => b.onclick = () => { showSeason[id] = +b.dataset.season; showPage(id); });
+  $("#grid").querySelectorAll(".epi").forEach(d => d.onclick = () => videoSheet(m.episodes[+d.dataset.k]));
+  bindPeople();
 }
 
 async function moviePage(id) {
@@ -1187,7 +1229,7 @@ async function home() {
   if (head1) {
     const k = pool.push(head1) - 1;
     html += whHead(head1, `${playActions(head1, k, "head")}${heartBtn({jf: head1.show ? head1.show.slice(3) : head1.id, title: head1.show_title || head1.title})}`, false,
-      head1.show || "jfmovie:" + head1.id);
+      head1.show ? head1.show.replace(/^jf:/, "jfshow:") : "jfmovie:" + head1.id);
   }
   if (top) {
     const k = pool.push(top) - 1;

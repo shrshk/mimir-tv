@@ -306,6 +306,34 @@ def router(
             more = [card(x) for x in jf.similar(id) if x.get("Type") in PLAYABLE | {"Series"}]
         except JellyfinError:
             more = []
+        return details_of(i) | {"more": more}
+
+    @api.get("/api/jf/show/{id}")
+    def show_page(id: str = Path(pattern=ID)):
+        """A show's page, as Wholphin's: its details, seasons, the next episode to watch (its main button), and every
+        episode with its watch state."""
+        i = guard(jf.details, id)
+        try:
+            nxt = jf.next_of(id)
+        except JellyfinError:
+            nxt = None
+        episodes = [
+            card(e)
+            | {
+                "season": e.get("ParentIndexNumber") or 0,
+                "n": e.get("IndexNumber") or 0,
+                "added": e.get("DateCreated") or "",
+            }
+            for e in guard(jf.episodes, id)
+        ]
+        seasons = [
+            {"id": x["Id"], "name": x.get("Name", ""), "n": x.get("IndexNumber") or 0} for x in guard(jf.seasons, id)
+        ]
+        return details_of(i) | {"seasons": seasons, "next": card(nxt) if nxt else None, "episodes": episodes}
+
+    def details_of(i: dict) -> dict:
+        """A title's details for its page: facts, genres, cast and crew (each opening their page), its backdrop."""
+        id = i["Id"]
         people = i.get("People") or []
         return card(i) | {
             "year": i.get("ProductionYear") or "",
@@ -332,7 +360,6 @@ def router(
             "backdrop": f"/jf/Items/{id}/Images/Backdrop?maxWidth=1280&quality=85"
             if i.get("BackdropImageTags")
             else "",
-            "more": more,
         }
 
     @api.get("/api/jf/home")

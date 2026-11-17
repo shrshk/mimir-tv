@@ -218,6 +218,21 @@ class Jellyfin:
         params = {"userId": self.user(), "Limit": str(limit), "Fields": self.FIELDS, "MediaTypes": "Video"}
         return (self._call("GET", "/UserItems/Resume", params) or {}).get("Items", [])
 
+    def seasons(self, series_id: str) -> list[dict]:
+        params = {"userId": self.user()}
+        return (self._call("GET", f"/Shows/{series_id}/Seasons", params) or {}).get("Items", [])
+
+    def episodes(self, series_id: str) -> list[dict]:
+        """Every episode of a show in order, each with the user's watch state."""
+        params = {"userId": self.user(), "Fields": self.FIELDS + ",DateCreated"}
+        return (self._call("GET", f"/Shows/{series_id}/Episodes", params) or {}).get("Items", [])
+
+    def next_of(self, series_id: str) -> dict | None:
+        """The show's next episode to watch (Jellyfin's Next up for this show), or None."""
+        params = {"userId": self.user(), "seriesId": series_id, "limit": "1", "Fields": self.FIELDS}
+        found = (self._call("GET", "/Shows/NextUp", params) or {}).get("Items", [])
+        return found[0] if found else None
+
     def next_up(self, limit: int = 20) -> list[dict]:
         """The next episode of each show being watched."""
         params = {"userId": self.user(), "Limit": str(limit), "Fields": self.FIELDS}

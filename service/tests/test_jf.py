@@ -218,8 +218,15 @@ def fake(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Items": [ITEMS[i] for i, d in USER_DATA.items() if d.get("IsFavorite")]})
     if p == f"/Shows/{SHOW}/Episodes":
         eps = [ITEMS[EP1], ITEMS[EP2]]
+        if "startItemId" not in q:  # the whole show, with each episode's watch state, as a user sees it
+            assert q["userId"] == "u1"
+            return httpx.Response(200, json={"Items": [e | {"UserData": USER_DATA.get(e["Id"], {})} for e in eps]})
         at = next(n for n, e in enumerate(eps) if e["Id"] == q["startItemId"])
         return httpx.Response(200, json={"Items": eps[at : at + int(q["limit"])]})
+    if p == f"/Shows/{SHOW}/Seasons":
+        return httpx.Response(
+            200, json={"Items": [{"Id": "9a" * 16, "Name": "Season 1", "IndexNumber": 1, "Type": "Season"}]}
+        )
     if p == "/Sessions":  # like Jellyfin: asked for sessions a user can command, only those taking remote control
         if "ControllableByUserId" in q:
             assert q["ControllableByUserId"] == "u1"
@@ -826,3 +833,28 @@ def test_cards_carry_what_wholphins_rows_show_and_watched_can_be_set_either_way(
     assert c.post("/api/jf/watched", json={"id": EP1, "on": False}).json() == {"played": False}
     assert not USER_DATA[EP1]["Played"]
     assert c.post("/api/jf/watched", json={"id": "../Users", "on": True}).status_code == 422
+
+
+def test_a_shows_page_has_its_details_seasons_next_episode_and_episodes_with_their_watch_state(tmp_path, monkeypatch):
+    series = item(SHOW, "A Show", "Series", ProductionYear=2022, OfficialRating="TV-14", CommunityRating=8.04)
+    monkeypatch.setitem(ITEMS, SHOW, series | {"Overview": "Two episodes.", "BackdropImageTags": ["b"]})
+    monkeypatch.setattr("tests.test_jf.NEXT_UP", [ITEMS[EP2]])
+    _, c, _ = setup(tmp_path)
+    USER_DATA[EP1] = {"Played": True}
+    USER_DATA[EP2] = {"PlaybackPositionTicks": 9_000_000_000}  # a quarter in
+    show = c.get(f"/api/jf/show/{SHOW}").json()
+    assert (show["title"], show["year"], show["rating"], show["score"], show["desc"]) == (
+        "A Show",
+        2022,
+        "TV-14",
+        8.0,
+        "Two episodes.",
+    )
+    assert show["backdrop"] == f"/jf/Items/{SHOW}/Images/Backdrop?maxWidth=1280&quality=85"
+    assert [(x["name"], x["n"]) for x in show["seasons"]] == [("Season 1", 1)]
+    assert (show["next"]["id"], show["next"]["title"]) == (EP2, "Second")  # the main button plays it
+    assert [(e["season"], e["n"], e["title"], e["played"], e["progress"]) for e in show["episodes"]] == [
+        (1, 1, "Pilot", True, 0),
+        (1, 2, "Second", False, 25),
+    ]
+    assert c.get("/api/jf/show/../Users").status_code == 404
