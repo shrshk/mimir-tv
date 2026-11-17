@@ -231,6 +231,11 @@
   .gd .pb { position:absolute; top:3px; bottom:3px; border-radius:6px; background:#ffffff0f; padding:4px 7px; font-size:12px; overflow:hidden;
             white-space:nowrap; text-overflow:ellipsis; color:var(--mute); cursor:pointer; border-left:1px solid var(--bg); }
   .gd .pb.on { background:#7A28FE40; color:var(--ink); font-weight:600; }
+  .glist { max-height:58vh; overflow-y:auto; margin-top:10px; }
+  .glist .gh { font-size:12px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:.04em; margin:12px 0 4px; }
+  .glist .gi { display:flex; width:100%; justify-content:space-between; align-items:center; background:none; border-radius:10px; padding:10px 8px;
+               font-weight:500; text-align:left; }
+  .glist .gi small { color:var(--dim); } .glist .gi.on { background:#7A28FE33; color:var(--ink); }
   .gd .nowline { position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:1; pointer-events:none; }
   .wh .row a.alt:has(.gico) { width:42px; height:42px; padding:0; border-radius:50%; background:#ffffff1a; display:inline-flex; align-items:center;
                               justify-content:center; color:var(--ink); }
@@ -1013,8 +1018,10 @@ async function livePage(more) {
   current = {node: "__live", title: "Live TV", items: [], videos: []};
   const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
   let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
+    // The provider's categories (60 and more) in a sheet with a search, not a line of chips: the pick shows here.
     + `<div class="chips line">${chip(!v.group && !v.fav, "All", 'data-group=""')}${chip(v.fav, "♥ Favourites", "data-fav")}`
-    + v.groups.map(g => chip(v.group === g.name, `${esc(g.name)}<small>${g.count}</small>`, `data-group="${esc(g.name)}"`)).join("") + `</div>`;
+    + (v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group=""') + chip(false, "▾", 'data-pick aria-label="Change category"') : chip(false, "Categories ▾", "data-pick"))
+    + `</div>`;
   const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
   const hm = t => new Date(t).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
   const logo = c => `<div class="lg"${c.thumb ? ` style="background-image:url('${c.thumb}')"` : ""}>${c.thumb ? "" : esc(c.name)}${c.fav ? `<span class="h">♥</span>` : ""}</div>`;
@@ -1044,6 +1051,26 @@ async function livePage(more) {
   $("#grid").querySelectorAll("[data-fav]").forEach(b => b.onclick = () => { v.fav = !v.fav; v.group = ""; livePage(); });
   $("#grid").querySelectorAll("[data-ch]").forEach(d => d.onclick = () => videoSheet(cardOf(v.items[+d.dataset.ch])));
   const moreBtn = $("#grid [data-more]"); if (moreBtn) moreBtn.onclick = () => livePage(true);
+  $("#grid").querySelectorAll("[data-pick]").forEach(b => b.onclick = pickGroup);
+}
+// Live TV's categories: a search, then each language's (or kind's) categories with their channel counts.
+function pickGroup() {
+  const v = liveView;
+  $("#dlgbody").innerHTML = `<div class="grab"></div><div class="body"><h2>Categories</h2>`
+    + `<input id="gq" type="search" placeholder="Search categories (news, telugu, cricket …)" autocomplete="off" enterkeyhint="search"><div id="glist" class="glist"></div></div>`;
+  const draw = () => {
+    const words = $("#gq").value.toLowerCase().split(/\s+/).filter(Boolean), by = {};
+    for (const g of v.groups.filter(g => words.every(w => g.name.toLowerCase().includes(w)))) {
+      const [top, ...rest] = g.name.split(" · ");
+      (by[top] = by[top] || []).push({...g, label: rest.join(" · ") || top});
+    }
+    $("#glist").innerHTML = Object.entries(by).map(([top, gs]) => `<div class="gh">${esc(top)}</div>`
+      + gs.map(g => `<button class="gi${g.name === v.group ? " on" : ""}" data-g="${esc(g.name)}"><span>${esc(g.label)}</span><small>${g.count}</small></button>`).join("")).join("")
+      || `<div class="mute" style="padding:12px 0">No category matches.</div>`;
+    $("#glist").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { v.group = b.dataset.g; v.fav = false; $("#dlg").close(); livePage(); });
+  };
+  $("#gq").oninput = draw; draw();
+  $("#dlg").classList.add("sheet"); $("#dlg").showModal();
 }
 
 // A show, as Wholphin's: the header's main button plays the next episode, then season tabs and the episodes.
