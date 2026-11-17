@@ -887,11 +887,15 @@ def test_live_tv_lists_whats_on_now_by_kind_each_card_playing_its_channel(tmp_pa
             show("Cricket: Final", "ch1", IsSports=True),
             show("Evening Bulletin", "ch2", IsNews=True),
             show("Cartoons", "ch3", IsKids=True),
+            show(
+                "Schedule not available", "ch4", IsNews=True
+            ),  # a guide's filler for a slot it does not know: left out
         ],
     )
     _, c, _ = setup(tmp_path)
     live = c.get("/api/jf/live").json()
     assert [r["name"] for r in live["rows"]] == ["On now", "Sports", "News", "Kids"]  # a kind with nothing on: no row
+    assert [x["title"] for x in live["rows"][2]["items"]] == ["Evening Bulletin"]
     sports = live["rows"][1]["items"]
     assert [(x["title"], x["channel"], x["id"], x["type"], x["on_now"]) for x in sports] == [
         ("Cricket: Final", "CH1", "ch1", "TvChannel", True)

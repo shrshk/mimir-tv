@@ -136,6 +136,10 @@ def wide(i: dict) -> str:
     return ""
 
 
+# A guide's filler for a slot it knows nothing about: not a programme to show.
+FILLER = re.compile(r"^\s*(schedule not available|no information|to be announced|tba|no programme)\b", re.I)
+
+
 def programme(p: dict) -> dict:
     """A guide programme as a card that plays its channel: the programme's name, the channel's name and logo, its
     times, and how far in it is when on now."""
@@ -283,7 +287,11 @@ def router(
 
         def row(kind: str) -> list[dict]:
             try:
-                return [programme(p) for p in jf.airing(kind) if p.get("ChannelId")]
+                return [
+                    programme(p)
+                    for p in jf.airing(kind)
+                    if p.get("ChannelId") and not FILLER.match(p.get("Name") or "")
+                ]
             except JellyfinError:
                 return []
 
