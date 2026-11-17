@@ -394,6 +394,10 @@ class Jellyfin:
         body = {"PlaybackPositionTicks": ticks, "LastPlayedDate": now}
         self._call("POST", f"/UserItems/{item_id}/UserData", {"userId": self.user()}, body)
 
+    def clear_position(self, item_id: str) -> None:
+        """Where it was left forgotten: off Continue watching (Resume lists items with a position)."""
+        self._call("POST", f"/UserItems/{item_id}/UserData", {"userId": self.user()}, {"PlaybackPositionTicks": 0})
+
     def set_played(self, item_id: str, on: bool) -> None:
         self._call("POST" if on else "DELETE", f"/UserPlayedItems/{item_id}", {"userId": self.user()})
 

@@ -141,7 +141,7 @@ are files readable by you only.
   its place and played marks there (so Continue watching is the same on the TV), and goes on to the next episode after
   a short countdown. In a title's card, ▶ Jellyfin and 📺 TV sit side by side, with Play here, My list and the rest as quiet links below.
 - **Looks like Wholphin** (as if it had an iPhone app): its purple-dark colours; Home's header is what you are
-  watching (its backdrop, facts with when it ends, Resume), then wide Continue watching cards with the time left; a
+  watching (its backdrop, facts with when it ends, Resume), then wide Continue watching cards with the time left (✕ takes one off, in every Jellyfin app); a
   title's page has its facts, genres, ✓ watched, ♥ My list and its cast and crew; a show's page plays the next
   episode from its main button, with season tabs and episodes showing progress, watched and new; a Live TV tab lists
   every channel as Streamyfin and Wholphin do (favourites first) in the provider's groups (Telugu · News, Sports ·

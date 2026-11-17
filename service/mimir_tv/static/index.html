@@ -1359,8 +1359,9 @@ async function home() {
     // Wholphin's wide cards where most have a wide picture (a still, a backdrop); else posters (a provider's titles
     // have only those), with what is left under each.
     const wide = left.filter(i => i.wide).length * 2 >= left.length;
-    if (left.length) html += head(title) + (wide ? strip(left, true)
-      : `<div class="strip">${left.map(i => tile(i, [i.show_title ? i.title : "", leftOf(i)].filter(Boolean).join(" · ") || i.sub)).join("")}</div>`);
+    const row = wide ? strip(left, true)
+      : `<div class="strip">${left.map(i => tile(i, [i.show_title ? i.title : "", leftOf(i)].filter(Boolean).join(" · ") || i.sub)).join("")}</div>`;
+    if (left.length) html += head(title) + (title === "Continue watching" ? row.replace('<div class="strip', '<div data-resume class="strip') : row);
   }
   if (recs.items.length) html += head("Worth the hype on your apps", "__recs") + strip(recs.items.map(recTile));
   const titles = list.filter(i => !i.live), channels = list.filter(i => i.live);
@@ -1385,6 +1386,7 @@ async function home() {
   $("#grid").innerHTML = html + (provRows ? provHtml(provRows) : "");
   bindTiles(true);
   bindHome();
+  resumeRemovers();
   document.querySelectorAll("#grid .wh h2[data-open]").forEach(h => h.onclick = () => open(h.dataset.open, h.textContent));
   if (provRows) return;
   const later = await provP;
@@ -1394,6 +1396,22 @@ async function home() {
   bindHome();
 }
 let homeGen = 0;  // a newer Home drops what an older one was still waiting for
+
+// Continue watching: ✕ on each card takes it off (Jellyfin forgets where it was left, in every app).
+function resumeRemovers() {
+  document.querySelectorAll("#grid .strip[data-resume] .tile[data-jfkey]").forEach(t => {
+    const id = t.dataset.jfkey.slice(3);
+    t.querySelector(".art").insertAdjacentHTML("beforeend", `<button class="rm" aria-label="Remove from Continue watching">✕</button>`);
+    t.querySelector(".rm").onclick = async e => {
+      e.stopPropagation();
+      try { await api("/api/jf/resume/" + enc(id), {method: "DELETE"}); } catch (err) { return toast(err.message); }
+      const strip = t.parentElement;
+      t.remove();
+      if (!strip.children.length) { if (strip.previousElementSibling?.classList.contains("rowhead")) strip.previousElementSibling.remove(); strip.remove(); }  // the row's heading too
+      toast("Removed from Continue watching");
+    };
+  });
+}
 // Home's links, "Browse every section" tiles and the providers' Show/Hide (again after the providers' rows come)
 function bindHome() {
   $("#grid").querySelectorAll("[data-see]").forEach(a => a.onclick = () => a.dataset.see === "__list" ? showTab("list") : a.dataset.see === "__recs" ? forYou() : open(a.dataset.see, a.dataset.title, true));

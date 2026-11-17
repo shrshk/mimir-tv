@@ -538,6 +538,11 @@ def router(
         """Where Play here starts: where it was left, on any player (seconds)."""
         return {"start": (guard(jf.user_data, id).get("PlaybackPositionTicks") or 0) / 1e7}
 
+    @api.delete("/api/jf/resume/{id}", status_code=204)
+    def forget_resume(id: str = Path(pattern=ID)):
+        """Off Continue watching, in every Jellyfin app: Jellyfin forgets where it was left (watched stays as it is)."""
+        guard(jf.clear_position, id)
+
     @api.post("/api/jf/playing", status_code=204)
     def watching(w: Watching):
         """Play here's progress, into Jellyfin: Continue watching and played follow it everywhere, the TV too."""

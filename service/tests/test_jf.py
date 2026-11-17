@@ -185,10 +185,12 @@ def fake(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"Items": [e for e in EPISODES if e.get("SeriesId") == q.get("ParentId")]})
     if p == "/Items" and "ParentId" in q:
         return httpx.Response(200, json={"Items": [ITEMS[MOVIE], ITEMS[CLIP]] if q["ParentId"] == HOME else []})
-    if p == "/UserItems/Resume":
+    if p == "/UserItems/Resume":  # the film is started, until its position is set back to 0
         assert q["userId"] == "u1"
+        started = USER_DATA.get(MOVIE, {}).get("PlaybackPositionTicks", 1)
         return httpx.Response(
-            200, json={"Items": [ITEMS[MOVIE] | {"UserData": {"PlaybackPositionTicks": 9_000_000_000}}]}
+            200,
+            json={"Items": [ITEMS[MOVIE] | {"UserData": {"PlaybackPositionTicks": 9_000_000_000}}] if started else []},
         )
     if p == "/Shows/NextUp":
         return httpx.Response(500, text="boom") if NEXT_UP is None else httpx.Response(200, json={"Items": NEXT_UP})
@@ -1056,3 +1058,13 @@ def test_a_title_with_no_online_id_takes_a_picture_only_when_its_name_is_unique(
     fake = PosterJellyfin({"s1": dict(show)}, by_name=[hit, {"Name": "Bigg Boss OTT", "ImageUrl": "https://x/o.jpg"}])
     jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(fake.handler))
     assert jf.fill_poster("s1") and fake.saved == [("s1", "https://tmdb.example/bb.jpg")]
+
+
+def test_a_title_comes_off_continue_watching(tmp_path):
+    jf, c, _ = setup(tmp_path)
+    USER_DATA[MOVIE] = {"PlaybackPositionTicks": 9_000_000_000, "Played": False, "PlayCount": 0}
+    assert len(c.get("/api/jf/home").json()["resume"]) == 1
+    assert c.delete(f"/api/jf/resume/{MOVIE}").status_code == 204
+    assert c.get("/api/jf/home").json()["resume"] == []
+    assert USER_DATA[MOVIE]["Played"] is False  # not marked watched: only where it was left is forgotten
+    assert c.delete("/api/jf/resume/../Users").status_code in (404, 422)
