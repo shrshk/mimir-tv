@@ -135,6 +135,32 @@ def wide(i: dict) -> str:
     return ""
 
 
+def programme(p: dict) -> dict:
+    """A guide programme as a card that plays its channel: the programme's name, the channel's name and logo, its
+    times, and how far in it is when on now."""
+    start, end = p.get("StartDate") or "", p.get("EndDate") or ""
+    now = datetime.now(UTC)
+    on_now = start[:19] <= now.isoformat()[:19] < end[:19]
+    progress = 0
+    if on_now:
+        t0, t1 = (datetime.fromisoformat(x[:19]).replace(tzinfo=UTC) for x in (start, end))
+        progress = round(100 * (now - t0) / (t1 - t0)) if t1 > t0 else 0
+    return {
+        "id": p["ChannelId"],
+        "node": f"jf:{p['ChannelId']}",
+        "kind": "video",
+        "type": "TvChannel",
+        "title": p.get("Name", ""),
+        "channel": p.get("ChannelName") or "",
+        "desc": p.get("Overview") or "",
+        "start": start,
+        "end": end,
+        "on_now": on_now,
+        "progress": progress,
+        "thumb": f"/jf/Items/{p['ChannelId']}/Images/Primary?maxHeight=480&quality=85",
+    }
+
+
 def card(i: dict) -> dict:
     kind = "folder" if i.get("Type") in FOLDERS or i.get("IsFolder") else "video"
     sub = " · ".join(str(x) for x in (i.get("SeriesName"), i.get("ProductionYear")) if x)
@@ -245,28 +271,28 @@ def router(
         TV), on now first, then by start. Each card is its channel's, which plays it."""
         if not any(len(w) > 1 for w in words(q)):
             return []
-        now = datetime.now(UTC).isoformat()
-        out = []
-        for p in guard(jf.programmes, q):
-            if not (p.get("ChannelId") and named(q, p)):
-                continue
-            start, end = p.get("StartDate") or "", p.get("EndDate") or ""
-            out.append(
-                {
-                    "id": p["ChannelId"],
-                    "node": f"jf:{p['ChannelId']}",
-                    "kind": "video",
-                    "type": "TvChannel",
-                    "title": p.get("Name", ""),
-                    "channel": p.get("ChannelName") or "",
-                    "desc": p.get("Overview") or "",
-                    "start": start,
-                    "end": end,
-                    "on_now": start[:19] <= now[:19] < end[:19],
-                    "thumb": f"/jf/Items/{p['ChannelId']}/Images/Primary?maxHeight=480&quality=85",
-                }
-            )
+        out = [programme(p) for p in guard(jf.programmes, q) if p.get("ChannelId") and named(q, p)]
         return sorted(out, key=lambda x: (not x["on_now"], x["start"]))
+
+    @api.get("/api/jf/live")
+    def live_tv():
+        """The Live TV tab: what the guide has on now, all and by kind (Jellyfin's Live TV sections, as Wholphin
+        shows them); a kind with nothing on is left out."""
+        rows = []
+        for name, kind in (
+            ("On now", ""),
+            ("Sports", "isSports"),
+            ("News", "isNews"),
+            ("Kids", "isKids"),
+            ("Movies", "isMovie"),
+        ):
+            try:
+                items = [programme(p) for p in jf.airing(kind) if p.get("ChannelId")]
+            except JellyfinError:
+                items = []
+            if items:
+                rows.append({"name": name, "items": items})
+        return {"rows": rows}
 
     @api.post("/api/jf/watched")
     def watched(body: Watched):

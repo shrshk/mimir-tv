@@ -134,6 +134,11 @@ def fake(request: httpx.Request) -> httpx.Response:
         hits = [x for x in PROGRAMMES if any(w in x["Name"].lower() for w in words)]
         hits = [x for x in hits if x["EndDate"] > q["MinEndDate"] and x["StartDate"] < q["MaxStartDate"]]
         return httpx.Response(200, json={"Items": hits})
+    if p == "/LiveTv/Programs/Recommended":  # what is airing, by kind
+        assert q["userId"] == "u1" and q["isAiring"] == "true"
+        kind = next((k for k in ("isSports", "isNews", "isKids", "isMovie") if q.get(k) == "true"), None)
+        hits = [x for x in PROGRAMMES if not kind or x.get(kind[0].upper() + kind[1:])]
+        return httpx.Response(200, json={"Items": hits[: int(q["limit"])]})
     if p == "/Persons":  # loose, as Jellyfin's search is: any one word
         assert q["userId"] == "u1"
         words = q["searchTerm"].lower().split()
@@ -858,3 +863,37 @@ def test_a_shows_page_has_its_details_seasons_next_episode_and_episodes_with_the
         (1, 2, "Second", False, 25),
     ]
     assert c.get("/api/jf/show/../Users").status_code == 404
+
+
+def test_live_tv_lists_whats_on_now_by_kind_each_card_playing_its_channel(tmp_path, monkeypatch):
+    def at(minutes):
+        return time.strftime("%Y-%m-%dT%H:%M:%S.0000000Z", time.gmtime(time.time() + minutes * 60))
+
+    def show(name, channel, **kind):
+        return {
+            "Id": f"p-{name}",
+            "Name": name,
+            "Type": "Program",
+            "StartDate": at(-20),
+            "EndDate": at(40),
+            "ChannelId": channel,
+            "ChannelName": channel.upper(),
+            "ChannelPrimaryImageTag": "c",
+        } | kind
+
+    monkeypatch.setattr(
+        "tests.test_jf.PROGRAMMES",
+        [
+            show("Cricket: Final", "ch1", IsSports=True),
+            show("Evening Bulletin", "ch2", IsNews=True),
+            show("Cartoons", "ch3", IsKids=True),
+        ],
+    )
+    _, c, _ = setup(tmp_path)
+    live = c.get("/api/jf/live").json()
+    assert [r["name"] for r in live["rows"]] == ["On now", "Sports", "News", "Kids"]  # a kind with nothing on: no row
+    sports = live["rows"][1]["items"]
+    assert [(x["title"], x["channel"], x["id"], x["type"], x["on_now"]) for x in sports] == [
+        ("Cricket: Final", "CH1", "ch1", "TvChannel", True)
+    ]
+    assert 30 <= sports[0]["progress"] <= 36  # 20 minutes into an hour

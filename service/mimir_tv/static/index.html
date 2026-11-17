@@ -131,6 +131,8 @@
   .tile .bar2 { height:3px; background:var(--accent); margin-top:-3px; position:relative; border-radius:0 0 0 10px; }
   /* Wide cards (Wholphin's landscape rows: Continue watching, Next up, New episodes) */
   .strip.wide { grid-auto-columns:220px; } .tile.wide .art { aspect-ratio:16/9; }
+  .tile.logo .art img { object-fit:contain; padding:12px; background:#ffffff08; }  /* a channel's logo, whole */
+  .tile .art:has(img) .ph { visibility:hidden; }  /* the name on the art only while there is no picture */
   .tile.wide .t { -webkit-line-clamp:1; font-size:13px; }
   .tile .t { margin-top:6px; font-size:12px; font-weight:600; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .tile .s { font-size:11px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -327,7 +329,7 @@ if (new URLSearchParams(location.search).has("tv")) document.documentElement.cla
 <body>
 <header>
   <a id="logo" href="/" aria-label="Home"><img src="/icon-192.png" alt=""><b>mimir<span>tv</span></b></a>
-  <nav class="topnav"><button data-tab="home" class="on">Home</button><button data-tab="list">My list</button><button data-tab="library">Library</button></nav>
+  <nav class="topnav"><button data-tab="home" class="on">Home</button><button data-tab="live">Live TV</button><button data-tab="list">My list</button><button data-tab="library">Library</button></nav>
   <span class="grow"></span>
   <select id="tvpick" aria-label="Which TV 📺 plays on" title="Which TV 📺 plays on" hidden></select>
   <button class="icon" id="theme" aria-label="Theme: Cinema or Doodle" title="Theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></button>
@@ -353,6 +355,7 @@ if (new URLSearchParams(location.search).has("tv")) document.documentElement.cla
 <nav class="tabbar">
   <button data-tab="home" class="on"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 11h3v10h5v-6h4v6h5V11h3z"/></svg>Home</button>
   <button data-tab="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</button>
+  <button data-tab="live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="m8 3 4 4 4-4"/></svg>Live TV</button>
   <button data-tab="list"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>My list</button>
   <button data-tab="library"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Library</button>
 </nav>
@@ -463,6 +466,7 @@ function showTab(tab) {
   if (tab === "search") { $("#searchbar").hidden = false; $("#q").focus(); if (!$("#q").value.trim()) searchIdle(); }
   if (tab === "home") goHome();
   if (tab === "list") { $("#searchbar").hidden = true; $("#q").value = ""; open("__list", "My list", false); }
+  if (tab === "live") { $("#searchbar").hidden = true; $("#q").value = ""; open("__live", "Live TV", false); }
   scrollTo(0, 0);
 }
 function goHome() {
@@ -623,7 +627,7 @@ function tile(i, sub, wide) {
   if (i.type === "Series" && i.id && (i.node || "").startsWith("jf:")) i.node = "jfshow:" + i.id;  // its Wholphin page
   if (i.kind === "folder" && i.node) shows[i.node] = {thumb: i.thumb || "", sub: i.sub || "", apps: i.apps, tmdbRef: i.tmdbRef, tmdbTitle: i.tmdbTitle};  // for the app buttons on its page
   const jf = i.id || i.jf_id, key = jf ? `jf:${jf}` : "";
-  return `<div class="tile${wide ? " wide" : ""}" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
+  return `<div class="tile${wide ? " wide" : ""}${i.type === "TvChannel" || i.live ? " logo" : ""}" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
     + (i.progress ? `<div class="bar2" style="width:${i.progress}%"></div>` : "")
     + `<div class="t">${esc(wide && i.show_title ? i.show_title : i.title)}</div>${line ? `<div class="s">${esc(line)}</div>` : ""}</div>`;
 }
@@ -920,6 +924,7 @@ async function open(node, title, push = true) {
     if (!node) return home();
     if (node.startsWith("__sections:")) return sections(node.slice(11));
     if (node === "__list") return myList();
+    if (node === "__live") return livePage();
     if (node.startsWith("jfmovie:")) return moviePage(node.slice(8));
     if (node.startsWith("jfperson:")) return personPage(node.slice(9));
     if (node.startsWith("jfshow:")) return showPage(node.slice(7));
@@ -963,6 +968,24 @@ async function personPage(id) {
   current = {node: "jfperson:" + id, title: p.name, items: p.items, videos: [], jf: true};
   $("#grid").innerHTML = `<div class="people">${personBtn({id: p.id, name: "", thumb: p.thumb})}<div style="align-self:center"><h2 style="margin:0">${esc(p.name)}</h2><div class="mute">${p.items.length} title${p.items.length === 1 ? "" : "s"} in Jellyfin</div></div></div>`
     + (p.items.length ? p.items.map(i => tile(i)).join("") : `<div class="full mute">Nothing with ${esc(p.name)} in Jellyfin yet.</div>`);
+  bindTiles(true);
+}
+
+// Live TV (Wholphin's, from Jellyfin's Live TV): your channels, then what the guide has on now, all and by kind;
+// each card plays its channel, with how far in the programme is.
+async function livePage() {
+  crumbs = [{title: "Live TV", node: "__live"}]; renderTrail();
+  document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x.dataset.tab === "live"));
+  const [list, live] = await Promise.all([loadList(), api("/api/jf/live").catch(() => ({rows: []}))]);
+  pool = [];
+  current = {node: "__live", title: "Live TV", items: [], videos: []};
+  const head = name => `<div class="rowhead"><h3>${esc(name)}</h3></div>`;
+  let html = "";
+  const mine = list.filter(i => i.live);
+  if (mine.length) html += head("Your channels") + `<div class="strip">${mine.map(i => tile(i)).join("")}</div>`;
+  for (const r of live.rows) html += head(r.name) + `<div class="strip wide">${r.items.map(p => tile(p, p.channel, true)).join("")}</div>`;
+  if (!mine.length && !live.rows.length) html += `<div class="full mute">No TV guide yet. Live TV's guide fills once a guide source is set (Jellyfin: Live TV, guide data).</div>`;
+  $("#grid").innerHTML = html;
   bindTiles(true);
 }
 

@@ -139,6 +139,12 @@ are files readable by you only.
   (picture in picture, AirPlay, the lock screen): through Jellyfin, it starts where any Jellyfin app left off, saves
   its place and played marks there (so Continue watching is the same on the TV), and goes on to the next episode after
   a short countdown. In a title's card, ▶ Jellyfin and 📺 TV sit side by side, with Play here, My list and the rest as quiet links below.
+- **Looks like Wholphin** (as if it had an iPhone app): its purple-dark colours; Home's header is what you are
+  watching (its backdrop, facts with when it ends, Resume), then wide Continue watching cards with the time left; a
+  title's page has its facts, genres, ✓ watched, ♥ My list and its cast and crew; a show's page plays the next
+  episode from its main button, with season tabs and episodes showing progress, watched and new; a Live TV tab shows
+  your channels and what the guide has on now, all and by kind (sports, news, kids, movies). Doodle stays as the
+  other theme (the pencil button).
 - **Adding what is missing**: a provider's title has two buttons. ＋ Jellyfin adds it to the library as `.strm`
   files (a show, a movie or a live channel); ＋ My list adds it and makes it a favourite. Jellyfin's search index is
   read again at once, so every app finds it. A movie in another language (a dub) is its own title, named
