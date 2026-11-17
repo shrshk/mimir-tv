@@ -12,9 +12,10 @@
 <meta name="apple-mobile-web-app-title" content="mimir-tv">
 <meta name="theme-color" content="#000000">
 <style>
-  /* Two themes (D11): Cinema (these values, the default) and Doodle (html[data-theme="doodle"], at the end). */
-  :root { --bg:#000; --card:#181818; --card2:#2a2a2a; --ink:#fff; --mute:#a3a3a3; --line:#2f2f2f; --accent:#e50914; --ok:#46d369; --warn:#f5a623;
-          --tabbar:56px; --poster:112px; }
+  /* Two themes (D11): Wholphin's (these values, the default: its purple dark colours, Plex-like layout) and Doodle
+     (html[data-theme="doodle"], at the end). */
+  :root { --bg:#15121C; --card:#211D2A; --card2:#2C2738; --ink:#E8DFF0; --mute:#CCC3D9; --dim:#8E86A0; --line:#4A4456;
+          --accent:#D2BCFF; --btn:#7A28FE; --ok:#7ee0a1; --warn:#f5a623; --tabbar:56px; --poster:112px; }
   @media (min-width:700px) { :root { --poster:150px; } }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   /* The page never moves sideways (only the rows do): clip, not hidden, so the sticky header keeps working; no
@@ -26,12 +27,12 @@
 
   /* Header: logo, top tabs (wide screens), search */
   header { position:sticky; top:0; z-index:3; display:flex; align-items:center; gap:18px; padding:10px 16px;
-           padding-top:calc(env(safe-area-inset-top) + 10px); background:#000; }  /* solid: iOS draws text under a backdrop blur at low resolution until a scroll */
+           padding-top:calc(env(safe-area-inset-top) + 10px); background:var(--bg); }  /* solid: iOS draws text under a backdrop blur at low resolution until a scroll */
   /* The app icon and a lowercase, rounded name: mimir-tv's own look */
   #logo { display:inline-flex; align-items:center; font:700 21px/1 ui-rounded, "SF Pro Rounded", -apple-system, system-ui, sans-serif;
           color:var(--ink); text-decoration:none; white-space:nowrap; }
   #logo img { width:30px; height:30px; border-radius:8px; display:block; margin-right:8px; }
-  #logo span { color:#f2545b; }
+  #logo span { color:var(--accent); }
   /* The TV 📺 plays on, when the house has more than one (hidden otherwise) */
   #tvpick { width:auto; max-width:40vw; padding:6px 8px; font-size:15px; }
   .topnav { display:none; gap:4px; }
@@ -54,11 +55,11 @@
   }
 
   /* Bottom tab bar (phones) */
-  .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:space-around; background:#0b0b0b; border-top:1px solid #1f1f1f;
+  .tabbar { position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:space-around; background:#15121Cf2; border-top:1px solid #ffffff10;
             padding-bottom:env(safe-area-inset-bottom); }
   .tabbar button { flex:1; border:0; background:none; color:var(--mute); font-size:11px; padding:7px 0 6px; display:flex; flex-direction:column; align-items:center; gap:2px; }
   .tabbar button svg { width:22px; height:22px; }
-  .tabbar button.on { color:var(--ink); }
+  .tabbar button.on { color:var(--accent); }
   @media (min-width:700px) { .tabbar { display:none; } }
 
   main { max-width:1400px; margin:0 auto; padding:4px 0 calc(var(--tabbar) + env(safe-area-inset-bottom) + 24px); }
@@ -69,7 +70,7 @@
   /* Search */
   #searchbar { position:sticky; top:var(--headh, calc(58px + env(safe-area-inset-top))); z-index:2; background:var(--bg); padding:6px 0 10px; }
   #sugg { margin-top:8px; } #sugg:empty { display:none; }
-  #searchbar input { font-size:16px; padding:11px 14px 11px 38px; border-radius:6px; border:0; background:#2a2a2a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 11px center / 18px no-repeat; color:var(--ink); width:100%; }
+  #searchbar input { font-size:16px; padding:11px 14px 11px 38px; border-radius:6px; border:0; background:#ffffff12 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") 11px center / 18px no-repeat; color:var(--ink); width:100%; }
   #idx { font-size:12px; color:var(--mute); margin-top:6px; } #idx:empty { display:none; }
 
   /* Page title with a back arrow (inside a section or show) */
@@ -91,8 +92,8 @@
   .strip .tile { scroll-snap-align:start; }
   .group { grid-column:1/-1; margin:14px 0 -4px; font-size:15px; font-weight:700; }
   .recent h3 { margin:6px 0; font-size:15px; } .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
-  .chip { background:#2a2a2a; border-radius:16px; padding:7px 14px; font-weight:500; font-size:14px; }
-  .chip.on { background:var(--ink); color:var(--bg); }
+  .chip { background:#ffffff12; border-radius:16px; padding:7px 14px; font-weight:500; font-size:14px; }
+  .chip.on { background:var(--accent); color:#2a0f5c; }
   /* One line that scrolls sideways: search's filters and suggestions leave the screen to the titles. */
   .chips.line { grid-column:1/-1; flex-wrap:nowrap; overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; margin:4px -16px 6px; padding:0 16px; }
   .chips.line::-webkit-scrollbar { display:none; }
@@ -101,7 +102,7 @@
   .people { grid-column:1/-1; display:flex; gap:14px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none; }
   .people::-webkit-scrollbar { display:none; }
   .person { flex:none; width:84px; border:0; background:none; color:var(--ink); padding:0; text-align:center; font-size:13px; line-height:1.25; }
-  .person .face { width:72px; height:72px; margin:0 auto 6px; border-radius:50%; background:#2a2a2a center/cover; display:flex; align-items:center;
+  .person .face { width:72px; height:72px; margin:0 auto 6px; border-radius:50%; background:#ffffff12 center/cover; display:flex; align-items:center;
                   justify-content:center; font-size:26px; font-weight:700; color:var(--mute); }
   .person small { display:block; color:var(--mute); }
   .castlink { border:0; background:none; color:inherit; padding:0; font:inherit; text-decoration:underline; text-decoration-color:#666; text-underline-offset:3px; }
@@ -109,7 +110,7 @@
   @media (min-width:700px) { .chips.line { margin:4px -32px 6px; padding:0 32px; } }
   .recbar { margin:4px 0 6px; } .recsel { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; } .recsel select { width:auto; max-width:46%; }
   .tile { cursor:pointer; display:flex; flex-direction:column; min-width:0; }
-  .tile .art { position:relative; aspect-ratio:2/3; border-radius:6px; overflow:hidden; background:linear-gradient(160deg, #2b2b2b, #151515);
+  .tile .art { position:relative; aspect-ratio:2/3; border-radius:10px; overflow:hidden; background:linear-gradient(160deg, #2C2738, #1b1724);
                display:flex; align-items:flex-end; padding:8px; transition:transform .15s; }
   .tile .art .ph { font-weight:800; font-size:14px; line-height:1.15; color:#ffffffd0; overflow-wrap:anywhere; }
   .tile .art img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
@@ -123,15 +124,18 @@
   /* ♥: on My list (a Jellyfin favourite) */
   .tile .art .fav { position:absolute; top:6px; right:6px; z-index:1; font-size:13px; line-height:1; background:#000b; color:#ff5a6e; border-radius:10px; padding:3px 5px; }
   .tile .art .new ~ .fav { top:28px; }
-  .tile .art .new { position:absolute; top:6px; right:6px; z-index:1; font-size:11px; font-weight:700; background:var(--accent); color:#fff; border-radius:4px; padding:1px 6px; }
+  .tile .art .new { position:absolute; top:6px; right:6px; z-index:1; font-size:11px; font-weight:700; background:var(--btn); color:#fff; border-radius:4px; padding:1px 6px; }
   .tile .rm { position:absolute; bottom:6px; right:6px; z-index:1; width:28px; height:28px; padding:0; border-radius:50%; background:#000b; color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; }
   .tile .art .folder { position:absolute; top:6px; right:6px; font-size:11px; background:#000a; color:#fff; border-radius:4px; padding:1px 6px; }
   .tile:active .art { transform:scale(.97); } @media (hover:hover) { .tile:hover .art { transform:scale(1.04); } }
-  .tile .bar2 { height:3px; background:var(--accent); margin-top:-3px; position:relative; border-radius:0 0 0 6px; }
+  .tile .bar2 { height:3px; background:var(--accent); margin-top:-3px; position:relative; border-radius:0 0 0 10px; }
+  /* Wide cards (Wholphin's landscape rows: Continue watching, Next up, New episodes) */
+  .strip.wide { grid-auto-columns:220px; } .tile.wide .art { aspect-ratio:16/9; }
+  .tile.wide .t { -webkit-line-clamp:1; font-size:13px; }
   .tile .t { margin-top:6px; font-size:12px; font-weight:600; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .tile .s { font-size:11px; color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tile .s { font-size:11px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .skel { grid-column:1/-1; display:grid; grid-auto-flow:column; grid-auto-columns:var(--poster); gap:8px; overflow:hidden; }
-  .skel i { aspect-ratio:2/3; border-radius:6px; background:linear-gradient(90deg, #1a1a1a, #262626, #1a1a1a); background-size:200% 100%; animation:sh 1.2s infinite; }
+  .skel i { aspect-ratio:2/3; border-radius:10px; background:linear-gradient(90deg, #1d1926, #2a2533, #1d1926); background-size:200% 100%; animation:sh 1.2s infinite; }
   @keyframes sh { to { background-position:-200% 0; } }
 
   /* Featured title on Home */
@@ -168,10 +172,35 @@
   .grow { flex:1; min-width:0; }
   .mute { color:var(--mute); font-size:13px; }
   h2 { margin:0; font-size:17px; }
-  button { font:inherit; padding:8px 14px; border-radius:6px; border:0; background:var(--card2); color:var(--ink); cursor:pointer; font-weight:600; }
+  button { font:inherit; padding:8px 16px; border-radius:20px; border:0; background:#ffffff14; color:var(--ink); cursor:pointer; font-weight:600; }
   button:active { opacity:.8; }
-  button.p, a.btn { background:#fff; color:#000; font-weight:700; }
-  a.btn { font-size:inherit; padding:8px 14px; border-radius:6px; text-decoration:none; display:inline-flex; align-items:center; }
+  button.p, a.btn { background:var(--btn); color:#fff; font-weight:700; }
+  a.btn { font-size:inherit; padding:8px 16px; border-radius:22px; text-decoration:none; display:inline-flex; align-items:center; white-space:nowrap; }
+  /* Round icon buttons (Wholphin's: 📺, ✓ watched, ♥ My list, G) */
+  .round { width:42px; height:42px; padding:0; border-radius:50%; background:#ffffff1a; display:inline-flex; align-items:center; justify-content:center;
+           font-size:17px; color:var(--ink); text-decoration:none; flex:none; }
+  .round.on { background:var(--accent); color:#2a0f5c; }
+  /* Wholphin's header: the title's backdrop fading in from the top right, its name, a line of facts, the overview */
+  .wh { grid-column:1/-1; position:relative; margin:-4px -16px 2px; min-height:340px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; }
+  @media (min-width:700px) { .wh { margin:-4px -32px 2px; min-height:440px; } }
+  .wh .bd { position:absolute; top:0; right:0; width:84%; height:88%; background:center 25% / cover no-repeat; opacity:.85;
+            -webkit-mask-image:linear-gradient(90deg, transparent, #000 42%), linear-gradient(#000 52%, transparent);
+            -webkit-mask-composite:source-in; mask-composite:intersect; }
+  .wh.detail .bd { width:100%; height:78%; -webkit-mask-image:linear-gradient(#000 50%, transparent); }
+  .wh .in { position:relative; padding:0 16px 6px; } @media (min-width:700px) { .wh .in { padding:0 32px 10px; max-width:760px; } }
+  .wh h2 { font-size:clamp(26px, 7vw, 40px); font-weight:800; line-height:1.08; max-width:88%; cursor:pointer; }
+  .quick { color:var(--mute); font-size:13px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 6px; }
+  .quick .r { border:1px solid var(--line); border-radius:4px; padding:0 4px; font-size:11px; }
+  .quick .star { color:#f5c518; }
+  .wh .ov { color:var(--mute); font-size:14px; max-width:94%; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .wh .row { margin-top:12px; gap:8px; flex-wrap:nowrap; }
+  .wh .round, .wh .row a.alt:has(.gico) { width:38px; height:38px; font-size:16px; }
+  .pills { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0 4px; }
+  .pills span { font-size:12px; color:var(--mute); background:#ffffff12; border-radius:12px; padding:3px 10px; }
+  .ov3 { grid-column:1/-1; color:var(--mute); font-size:14px; margin:4px 0 0; }
+  .wh .row a.alt:has(.gico) { width:42px; height:42px; padding:0; border-radius:50%; background:#ffffff1a; display:inline-flex; align-items:center;
+                              justify-content:center; color:var(--ink); }
+  .wh .row .gico { border:0; font-size:16px; }
   button.alt, a.alt { border:0; background:none; color:var(--mute); padding:8px 6px; font-size:13px; font-weight:500; text-decoration:none; }
   button.x { border:0; background:none; color:var(--mute); padding:2px 6px; font-weight:400; }
   .big button, .big a.btn { padding:11px 18px; font-size:15px; }
@@ -225,7 +254,7 @@
   .tag { font-size:12px; color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:1px 8px; white-space:nowrap; }
   .warn { color:var(--warn); } .ok { color:var(--ok); }
   .bar { height:6px; background:#333; border-radius:3px; overflow:hidden; margin-top:6px; } .bar i { display:block; height:100%; background:var(--accent); transition:width .5s; }
-  input, select { font:inherit; font-size:16px; padding:9px 10px; border:0; border-radius:6px; background:#2a2a2a; color:var(--ink); width:100%; }
+  input, select { font:inherit; font-size:16px; padding:9px 10px; border:0; border-radius:10px; background:#ffffff12; color:var(--ink); width:100%; }
   label { display:block; font-size:13px; color:var(--mute); margin:10px 0 4px; }
   .pick { max-height:50vh; overflow:auto; margin-top:8px; }
   .pick div { display:flex; gap:8px; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
@@ -571,9 +600,12 @@ function toast(msg, id, play) {
 }
 
 let pool = [];  // videos shown as tiles (rows and search), opened by index
-function tile(i, sub) {
-  // The title is drawn on the poster too: it shows when there is no artwork (or it fails to load).
-  const img = i.thumb ? `<img loading="lazy" decoding="async" src="${i.thumb}" alt="" onerror="this.remove()">` : "";
+function tile(i, sub, wide) {
+  // The title is drawn on the poster too: it shows when there is no artwork (or it fails to load). wide: a landscape
+  // card (Wholphin's Continue watching): the wide picture, and how much is left.
+  const pic = wide ? i.wide || i.thumb : i.thumb;
+  const img = pic ? `<img loading="lazy" decoding="async" src="${pic}" alt="" onerror="this.remove()">` : "";
+  if (wide && !sub) sub = [i.show_title ? i.title : "", leftOf(i)].filter(Boolean).join(" · ") || i.sub;
   const attrs = i.kind === "folder" ? `data-node="${esc(i.node || "")}"` : `data-video="${pool.push(i) - 1}"`;
   const line = sub || i.sub || "";
   // Where it plays: the house's apps, and the provider for its results (both when its title is on an app too).
@@ -581,9 +613,38 @@ function tile(i, sub) {
   const apps = badges.length ? `<span class="apps">${badges.join("")}</span>` : "";
   if (i.kind === "folder" && i.node) shows[i.node] = {thumb: i.thumb || "", sub: i.sub || "", apps: i.apps, tmdbRef: i.tmdbRef, tmdbTitle: i.tmdbTitle};  // for the app buttons on its page
   const jf = i.id || i.jf_id, key = jf ? `jf:${jf}` : "";
-  return `<div class="tile" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
+  return `<div class="tile${wide ? " wide" : ""}" tabindex="0" ${attrs}${key ? ` data-jfkey="${esc(key)}"` : ""} data-title="${esc(i.title)}"><div class="art"><span class="ph">${esc(i.title)}</span>${img}${i.jf_id ? `<span class="in">✓ Jellyfin</span>` : ""}${i.new ? `<span class="new">${i.new} new</span>` : ""}${key ? favMark(key) : ""}${apps}</div>`
     + (i.progress ? `<div class="bar2" style="width:${i.progress}%"></div>` : "")
-    + `<div class="t">${esc(i.title)}</div>${line ? `<div class="s">${esc(line)}</div>` : ""}</div>`;
+    + `<div class="t">${esc(wide && i.show_title ? i.show_title : i.title)}</div>${line ? `<div class="s">${esc(line)}</div>` : ""}</div>`;
+}
+// "18 min left" (Wholphin's line under a started video)
+const leftOf = i => i.progress && i.minutes ? `${Math.max(1, Math.round(i.minutes * (100 - i.progress) / 100))} min left` : "";
+// Wholphin's facts line: 2024 • 2h 41m • UA • ★ 7.5 • Ends at 10:42 PM
+function quick(m) {
+  const hm = n => n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `${n}m`;
+  const left = m.minutes ? m.minutes * (100 - (m.progress || 0)) / 100 : 0;
+  const ends = left ? new Date(Date.now() + left * 60000).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"}) : "";
+  const bits = [m.year && esc(String(m.year)), m.minutes && hm(m.minutes), m.rating && `<span class="r">${esc(m.rating)}</span>`,
+    m.score && `<span class="star">★</span> ${esc(String(m.score))}`, ends && `Ends at ${ends}`].filter(Boolean);
+  return bits.length ? `<div class="quick">${bits.join(" <span>•</span> ")}</div>` : "";
+}
+// Wholphin's header: backdrop, name (a tap opens its page), facts, overview, then the buttons given.
+function whHead(m, buttons, detail, open) {
+  if (m.id) headCtx = {title: m.show_title || m.title, videos: [m], jf: true};  // what its buttons play
+  const art = m.backdrop || m.wide || big(m.thumb || "");
+  return `<div class="wh${detail ? " detail" : ""}">${art ? `<div class="bd" style="background-image:url('${art}')"></div>` : ""}<div class="in">`
+    + `<h2${open ? ` data-open="${esc(open)}"` : ""}>${esc(m.show_title || m.title)}</h2>${m.show_title ? `<div class="mute">${esc(m.title)}</div>` : ""}${quick(m)}`
+    + (detail && m.genres && m.genres.length ? `<div class="pills">${m.genres.map(g => `<span>${esc(g)}</span>`).join("")}</div>` : "")
+    + (!detail && m.desc ? `<div class="ov">${esc(m.desc)}</div>` : "")
+    + `<div class="row big">${buttons}</div></div></div>`;
+}
+// ✓: watched in Jellyfin (every Jellyfin app shows it), either way.
+const watchedBtn = m => m.id ? `<button class="round${m.played ? " on" : ""}" aria-pressed="${!!m.played}" title="Watched" aria-label="Watched" onclick="toggleWatched(this, '${esc(m.id)}')">✓</button>` : "";
+async function toggleWatched(b, id) {
+  const on = b.getAttribute("aria-pressed") !== "true";
+  try { await api("/api/jf/watched", {method: "POST", body: {id, on}}); } catch (e) { return toast(e.message); }
+  b.setAttribute("aria-pressed", on); b.classList.toggle("on", on);
+  toast(on ? "Marked watched" : "Marked not watched");
 }
 
 // How a video plays: Jellyfin first (its web app here, its TV app on the TV); playing here is the other.
@@ -628,6 +689,12 @@ function playActions(v, k, ctx) {
   // Your videos and a provider's items Jellyfin has (jf_id, from Jellyfin itself): ▶ opens them in Jellyfin (Swiftfin
   // on the iPhone); others: ＋ adds them. Play here plays in this page, through Jellyfin when it has the item.
   const id = v.id || v.jf_id;
+  // A header (Wholphin's): one main button, ▶ Resume where it was left, then round 📺 TV and 📱 play here.
+  if (ctx === "head" && id) {
+    return jfOpen(id, v.progress ? "▶ Resume" : "▶ Play", true)
+      + `<button class="round" title="Play on the TV" aria-label="Play on the TV" onclick="go('tv',0,2)">📺</button>`
+      + `<button class="round" title="Play here" aria-label="Play here" onclick="go('here',0,2)">📱</button>`;
+  }
   const open = id ? jfOpen(id, "▶ Jellyfin", true) : `<button class="p" onclick="go('jf',${k},${c})">＋ Jellyfin</button>`;
   return `${open}<button onclick="go('tv',${k},${c})">📺 TV</button>`
     + (id || v.here ? `<button class="alt" onclick="go('here',${k},${c})">Play here</button>` : "") + mine;
@@ -679,6 +746,11 @@ const favMark = key => `<span class="fav" aria-label="On My list"${saved.has(key
 function paintFavs() {
   document.querySelectorAll(".tile[data-jfkey] .fav").forEach(f => f.hidden = !saved.has(f.closest(".tile").dataset.jfkey));
 }
+// ♥ My list as Wholphin's round button (headers)
+function heartBtn(t) {
+  const on = saved.has(keyOf(t));
+  return `<button class="round lb heart${on ? " on" : ""}" data-key="${esc(keyOf(t))}" title="My list" aria-label="My list" onclick="toggleList(${toSave.push(t) - 1})">${on ? "♥" : "♡"}</button>`;
+}
 function listBtn(t) {
   const on = saved.has(keyOf(t));
   return `<button class="alt lb" data-key="${esc(keyOf(t))}" onclick="toggleList(${toSave.push(t) - 1})">${on ? "✓ My list" : "＋ My list"}</button>`;
@@ -691,7 +763,11 @@ async function toggleList(n) {
   } catch (e) { return toast(e.message); }
   on ? saved.delete(key) : saved.add(key);
   paintFavs();
-  document.querySelectorAll(".lb").forEach(b => { if (b.dataset.key === key) b.textContent = on ? "＋ My list" : "✓ My list"; });
+  document.querySelectorAll(".lb").forEach(b => {
+    if (b.dataset.key !== key) return;
+    if (b.classList.contains("heart")) { b.textContent = on ? "♡" : "♥"; b.classList.toggle("on", !on); }
+    else b.textContent = on ? "＋ My list" : "✓ My list";
+  });
   toast(on ? "Removed from My list" : "Added to My list");
   if (current && current.node === "__list") myList();
 }
@@ -748,8 +824,10 @@ function showOf(ctx) {
   return {node: c.node, title: c.title};
 }
 
+// The title a header (Home's, a title page's) plays: its buttons pass 2 as fromSheet.
+let headCtx = {title: "", videos: [], jf: true};
 async function go(how, k, fromSheet) {
-  const ctx = fromSheet ? sheet : current, v = ctx.videos[k];
+  const ctx = fromSheet === 2 ? headCtx : fromSheet ? sheet : current, v = ctx.videos[k];
   $("#dlg").close();
   if (how === "here") return playHere(ctx, v);
   const title = ctx.videos.length === 1 ? ctx.title : v.title;
@@ -864,7 +942,7 @@ function onAir(p) {
 }
 
 // A person (cast or crew): a round photo or their initial; tapping opens their page.
-const personBtn = p => `<button class="person" data-person="${esc(p.id)}" data-name="${esc(p.name)}"><span class="face"${p.thumb ? ` style="background-image:url('${p.thumb}')"` : ""}>${p.thumb ? "" : esc((p.name || "?")[0])}</span>${esc(p.name)}${p.count ? `<small>${p.count} title${p.count > 1 ? "s" : ""}</small>` : ""}</button>`;
+const personBtn = p => `<button class="person" data-person="${esc(p.id)}" data-name="${esc(p.name)}"><span class="face"${p.thumb ? ` style="background-image:url('${p.thumb}')"` : ""}>${p.thumb ? "" : esc((p.name || "?")[0])}</span>${esc(p.name)}${p.count ? `<small>${p.count} title${p.count > 1 ? "s" : ""}</small>` : p.small ? `<small>${esc(p.small)}</small>` : ""}</button>`;
 function bindPeople() {
   document.querySelectorAll("#grid [data-person]").forEach(b => b.onclick = () => open("jfperson:" + b.dataset.person, b.dataset.name));
 }
@@ -881,16 +959,13 @@ async function moviePage(id) {
   const m = await api("/api/jf/title?id=" + enc(id));
   pool = [];
   current = {node: "jfmovie:" + id, title: m.title, items: [], videos: [m], jf: true, jf_id: m.id};
-  const facts = [m.year, m.minutes ? `${m.minutes} min` : "", m.rating, m.score ? `★ ${m.score}` : "", m.genres.join(", "),
-    m.progress ? `${m.progress}% watched` : ""].filter(Boolean).join(" · ");
-  const art = m.backdrop || big(m.thumb);
-  let html = `<div class="hero">${art ? `<img src="${art}" alt="">` : ""}<div class="in"><h2>${esc(m.title)}</h2>${facts ? `<div class="s">${esc(facts)}</div>` : ""}
-    <div class="row big">${playActions(m, 0)}${listBtn({jf: m.id, title: m.title})}</div></div></div>`;
-  if (m.desc) html += `<div class="showbar"><div class="mute">${esc(m.desc)}</div></div>`;
-  // Each name opens that person's page (their titles here), as in Wholphin.
-  const named = role => (m.people || []).filter(p => p.role === role).map(p => p.id ? `<button class="castlink" data-person="${esc(p.id)}" data-name="${esc(p.name)}">${esc(p.name)}</button>` : esc(p.name)).join(", ");
-  const people = [m.directors.length ? `Director: ${named("Director")}` : "", m.cast.length ? `Cast: ${named("Actor")}` : ""].filter(Boolean);
-  if (people.length) html += `<div class="full mute">${people.join("<br>")}</div>`;
+  // Wholphin's details: backdrop, facts (with when it ends), genres, the ways to play and ✓ ♥ G, the overview, the
+  // cast and crew (each opens their titles here), titles like it.
+  const k = pool.push(m) - 1;
+  let html = whHead(m, `${playActions(m, k, "head")}${watchedBtn(m)}${heartBtn({jf: m.id, title: m.title})}${googleLink(m.title, false)}`, true);
+  if (m.desc) html += `<p class="ov3">${esc(m.desc)}</p>`;
+  const crew = (m.people || []).map(p => ({id: p.id, name: p.name, thumb: p.thumb, small: p.as || p.role}));
+  if (crew.length) html += `<div class="rowhead"><h3>Cast &amp; crew</h3></div><div class="people">${crew.map(p => p.id ? personBtn(p) : `<div class="person"><span class="face">${esc(p.name[0])}</span>${esc(p.name)}<small>${esc(p.small)}</small></div>`).join("")}</div>`;
   if (m.more.length) html += `<div class="rowhead"><h3>More like this</h3></div><div class="strip">${m.more.map(i => tile(i)).join("")}</div>`;
   $("#grid").innerHTML = html;
   bindTiles(true); bindPeople();
@@ -1084,7 +1159,7 @@ async function home() {
   crumbs = []; renderTrail(); pool = [];
   current = {node: "", title: "Home", items: [], videos: []};
   const head = (title, node, src) => `<div class="rowhead${src ? " sub" : ""}"><h3>${esc(title)}</h3>${node ? `<a data-see="${esc(node)}" data-title="${esc(title)}">See all ›</a>` : ""}</div>`;
-  const strip = items => `<div class="strip">${items.map(i => tile(i)).join("")}</div>`;
+  const strip = (items, wide) => `<div class="strip${wide ? " wide" : ""}">${items.map(i => tile(i, "", wide)).join("")}</div>`;
   $("#grid").innerHTML = `<div class="skel">${"<i></i>".repeat(8)}</div>`;
   const gen = ++homeGen;
   const still = () => gen === homeGen && current.title === "Home" && !crumbs.length && !$("#q").value.trim();
@@ -1102,19 +1177,24 @@ async function home() {
   if (!still()) return;
   // Featured: the top title trending on the house's apps (TMDB, its wide backdrop on wide screens), else the first
   // provider video with artwork (then Home waits for the providers' rows).
-  const top = trending.find(t => t.backdrop || t.thumb);
-  const provRows = top ? null : await provP;
+  // Wholphin's header: what is being watched (the first of Continue watching: Resume), else the featured title.
+  const watchingNow = jfRows.resume[0] || jfRows.next_up[0];
+  const head1 = watchingNow ? await api("/api/jf/title?id=" + enc(watchingNow.id)).catch(() => null) : null;
+  const top = head1 ? null : trending.find(t => t.backdrop || t.thumb);
+  const provRows = top || head1 ? null : await provP;
   if (!still()) return;
   let html = "";
+  if (head1) {
+    const k = pool.push(head1) - 1;
+    html += whHead(head1, `${playActions(head1, k, "head")}${heartBtn({jf: head1.show ? head1.show.slice(3) : head1.id, title: head1.show_title || head1.title})}`, false,
+      head1.show || "jfmovie:" + head1.id);
+  }
   if (top) {
     const k = pool.push(top) - 1;
-    const img = top.backdrop && top.thumb
-      ? `<picture><source media="(min-width:700px)" srcset="${top.backdrop}"><img src="${big(top.thumb)}" alt=""></picture>`
-      : `<img src="${top.backdrop || big(top.thumb)}" alt="">`;
-    html += `<div class="hero">${img}<div class="in"><h2>${esc(top.title)}</h2><div class="s">${esc([top.year, top.apps.map(a => a.name).join(", ")].filter(Boolean).join(" · "))}</div>
-      <div class="row big">${appButtons(top)}<button onclick="videoSheet(pool[${k}])">ⓘ Info</button></div></div></div>`;
+    html += whHead({title: top.title, year: top.year, backdrop: top.backdrop, thumb: top.thumb, desc: top.overview || ""},
+      `${appButtons(top)}<button class="round" title="Info" aria-label="Info" onclick="videoSheet(pool[${k}])">ⓘ</button>`);
   }
-  const pick = top ? null : provRows.flatMap(x => x.rows).flatMap(r => r.items).find(i => i.kind === "video" && i.thumb);
+  const pick = top || head1 ? null : provRows.flatMap(x => x.rows).flatMap(r => r.items).find(i => i.kind === "video" && i.thumb);
   if (pick) {
     const k = pool.push(pick) - 1;
     html += `<div class="hero"><img src="${pick.thumb}" alt=""><div class="in"><h2>${esc(pick.title)}</h2>${pick.sub ? `<div class="s">${esc(pick.sub)}</div>` : ""}
@@ -1126,7 +1206,7 @@ async function home() {
   const once = items => items.filter(i => !shown.has(i.id) && shown.add(i.id));
   for (const [title, items] of [["Continue watching", jfRows.resume], ["Next up", jfRows.next_up], ["New episodes", jfRows.new]]) {
     const left = once(items);
-    if (left.length) html += head(title) + strip(left);
+    if (left.length) html += head(title) + strip(left, true);  // Wholphin's wide cards
   }
   if (recs.items.length) html += head("Worth the hype on your apps", "__recs") + strip(recs.items.map(recTile));
   const titles = list.filter(i => !i.live), channels = list.filter(i => i.live);
@@ -1151,6 +1231,7 @@ async function home() {
   $("#grid").innerHTML = html + (provRows ? provHtml(provRows) : "");
   bindTiles(true);
   bindHome();
+  document.querySelectorAll("#grid .wh h2[data-open]").forEach(h => h.onclick = () => open(h.dataset.open, h.textContent));
   if (provRows) return;
   const later = await provP;
   if (!still()) return;

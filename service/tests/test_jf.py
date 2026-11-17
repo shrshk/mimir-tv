@@ -63,8 +63,8 @@ ITEMS = {
         CommunityRating=7.46,
         Genres=["Science Fiction", "Action"],
         People=[
-            {"Name": "Prabhas", "Type": "Actor", "Id": PRABHAS},
-            {"Name": "Deepika Padukone", "Type": "Actor", "Id": DEEPIKA},
+            {"Name": "Prabhas", "Type": "Actor", "Id": PRABHAS, "Role": "Bhairava", "PrimaryImageTag": "p"},
+            {"Name": "Deepika Padukone", "Type": "Actor", "Id": DEEPIKA, "Role": "Sumathi"},
             {"Name": "Nag Ashwin", "Type": "Director"},
             {"Name": "C. Ashwini Dutt", "Type": "Producer"},
         ],
@@ -207,6 +207,8 @@ def fake(request: httpx.Request) -> httpx.Response:
         data = USER_DATA.setdefault(user_item, {"PlaybackPositionTicks": 0, "Played": False, "PlayCount": 0})
         if p.endswith("/UserData") and request.method == "POST":
             data.update(json.loads(request.content))
+        elif p.startswith("/UserPlayedItems/") and request.method == "DELETE":
+            data.update(Played=False)
         elif p.startswith("/UserPlayedItems/"):
             data.update(Played=True, PlayCount=data["PlayCount"] + 1, PlaybackPositionTicks=0)
         elif p.startswith("/UserFavoriteItems/"):
@@ -664,9 +666,15 @@ def test_a_movie_page_has_its_details_and_the_librarys_titles_like_it(tmp_path):
     assert page["cast"] == ["Prabhas", "Deepika Padukone"]  # actors only: the producer is not cast
     # Each named person opens their own page (their titles here), as in Wholphin.
     assert page["people"] == [
-        {"id": PRABHAS, "name": "Prabhas", "role": "Actor"},
-        {"id": DEEPIKA, "name": "Deepika Padukone", "role": "Actor"},
-        {"id": "", "name": "Nag Ashwin", "role": "Director"},
+        {
+            "id": PRABHAS,
+            "name": "Prabhas",
+            "role": "Actor",
+            "as": "Bhairava",
+            "thumb": f"/jf/Items/{PRABHAS}/Images/Primary?maxHeight=240&quality=85",
+        },
+        {"id": DEEPIKA, "name": "Deepika Padukone", "role": "Actor", "as": "Sumathi", "thumb": ""},
+        {"id": "", "name": "Nag Ashwin", "role": "Director", "as": "", "thumb": ""},
     ]
     assert page["backdrop"] == f"/jf/Items/{FILM}/Images/Backdrop?maxWidth=1280&quality=85"
     assert [m["title"] for m in page["more"]] == ["Salaar"]
@@ -796,3 +804,25 @@ def test_search_is_wholphins_a_group_per_kind_closest_names_first_and_spelling_s
     ]
     assert search("telgu news") == [("TvChannel", "Telugu News")]  # a letter left out, as Jellyfin forgives
     assert search("drak") == []  # a short word is not guessed at
+
+
+def test_cards_carry_what_wholphins_rows_show_and_watched_can_be_set_either_way(tmp_path, monkeypatch):
+    # A wide picture for the landscape rows (Continue watching): a movie's backdrop, an episode's or a video's own
+    # still; its length, so the page can say how much is left; whether it was watched.
+    monkeypatch.setitem(ITEMS[FILM], "UserData", {"Played": True})
+    _, c, _ = setup(tmp_path)
+    film = c.get("/api/jf/title", params={"id": FILM}).json()
+    assert (film["wide"], film["minutes"], film["played"]) == (
+        f"/jf/Items/{FILM}/Images/Backdrop?maxWidth=780&quality=85",
+        60,
+        True,
+    )
+    pilot = c.get("/api/jf/title", params={"id": EP1}).json()
+    assert (pilot["wide"], pilot["played"]) == (f"/jf/Items/{EP1}/Images/Primary?maxWidth=780&quality=85", False)
+    assert c.get("/api/jf/title", params={"id": LIKE_IT}).json()["wide"] == ""  # a poster only: no wide picture
+
+    assert c.post("/api/jf/watched", json={"id": EP1, "on": True}).json() == {"played": True}
+    assert USER_DATA[EP1]["Played"]
+    assert c.post("/api/jf/watched", json={"id": EP1, "on": False}).json() == {"played": False}
+    assert not USER_DATA[EP1]["Played"]
+    assert c.post("/api/jf/watched", json={"id": "../Users", "on": True}).status_code == 422

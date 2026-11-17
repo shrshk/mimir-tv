@@ -351,6 +351,9 @@ class Jellyfin:
         body = {"PlaybackPositionTicks": ticks, "LastPlayedDate": now}
         self._call("POST", f"/UserItems/{item_id}/UserData", {"userId": self.user()}, body)
 
+    def set_played(self, item_id: str, on: bool) -> None:
+        self._call("POST" if on else "DELETE", f"/UserPlayedItems/{item_id}", {"userId": self.user()})
+
     def mark_played(self, item_id: str) -> None:
         """Played, its play count up and its position back to the start (as Jellyfin does at the end)."""
         self._call("POST", f"/UserPlayedItems/{item_id}", {"userId": self.user()})

@@ -41,6 +41,11 @@ class Play(BaseModel):
     tv: str = Field("", max_length=100)  # which TV (its name in Settings); the first one when empty
 
 
+class Watched(BaseModel):
+    id: str = Field(pattern=ID)
+    on: bool
+
+
 def which_tv(tvs: Tvs | None, name: str) -> str:
     """The address of the TV a request names ("" for the default TV); 404 when Settings has no such TV."""
     try:
@@ -118,6 +123,18 @@ def named(q: str, i: dict) -> bool:
     return all(has(w) for w in words(q) if len(w) > 1)
 
 
+def wide(i: dict) -> str:
+    """A landscape picture for Wholphin-style wide rows (Continue watching): a movie's or show's backdrop, an
+    episode's, a video's or a channel's own picture (a still); "" when there is only a poster."""
+    if i.get("BackdropImageTags"):
+        return f"/jf/Items/{i['Id']}/Images/Backdrop?maxWidth=780&quality=85"
+    if i.get("Type") in ("Episode", "Video", "TvChannel") and (i.get("ImageTags") or {}).get("Primary"):
+        return f"/jf/Items/{i['Id']}/Images/Primary?maxWidth=780&quality=85"
+    if i.get("ParentBackdropItemId") and i.get("ParentBackdropImageTags"):
+        return f"/jf/Items/{i['ParentBackdropItemId']}/Images/Backdrop?maxWidth=780&quality=85"
+    return ""
+
+
 def card(i: dict) -> dict:
     kind = "folder" if i.get("Type") in FOLDERS or i.get("IsFolder") else "video"
     sub = " · ".join(str(x) for x in (i.get("SeriesName"), i.get("ProductionYear")) if x)
@@ -144,6 +161,9 @@ def card(i: dict) -> dict:
         if i.get("SeriesId") and i.get("SeriesPrimaryImageTag")
         else "",
         "progress": round(100 * pos / i["RunTimeTicks"]) if pos and i.get("RunTimeTicks") else 0,
+        "minutes": round(i["RunTimeTicks"] / 6e8) if i.get("RunTimeTicks") else 0,
+        "played": bool((i.get("UserData") or {}).get("Played")),
+        "wide": wide(i),
         # An episode's show, for its sheet's "Go to show" (Next up, Continue watching, search)
         "show": f"jf:{i['SeriesId']}" if i.get("SeriesId") else "",
         "show_title": i.get("SeriesName") or "",
@@ -248,6 +268,12 @@ def router(
             )
         return sorted(out, key=lambda x: (not x["on_now"], x["start"]))
 
+    @api.post("/api/jf/watched")
+    def watched(body: Watched):
+        """Watched, or not: Jellyfin's played mark (every Jellyfin app shows it)."""
+        guard(jf.set_played, body.id, body.on)
+        return {"played": body.on}
+
     @api.get("/api/jf/people")
     def people(q: str = Query(max_length=200)):
         """Cast and crew whose name has every word of the search (as Wholphin's search finds them), with how many of
@@ -291,7 +317,15 @@ def router(
             "directors": [p["Name"] for p in people if p.get("Type") == "Director"],
             # Each opens its own page (/api/jf/person/<id>): the cast first, then the directors.
             "people": [
-                {"id": p.get("Id") or "", "name": p["Name"], "role": p["Type"]}
+                {
+                    "id": p.get("Id") or "",
+                    "name": p["Name"],
+                    "role": p["Type"],
+                    "as": p.get("Role") or "",
+                    "thumb": f"/jf/Items/{p['Id']}/Images/Primary?maxHeight=240&quality=85"
+                    if p.get("Id") and p.get("PrimaryImageTag")
+                    else "",
+                }
                 for p in [x for x in people if x.get("Type") == "Actor"][:8]
                 + [x for x in people if x.get("Type") == "Director"]
             ],
