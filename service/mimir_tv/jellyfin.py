@@ -139,6 +139,34 @@ class Jellyfin:
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
+    def all_channels(self) -> list[dict]:
+        """Every Live TV channel, favourites first (as Jellyfin's apps list them), then by number."""
+        params = {
+            "userId": self.user(),
+            "enableFavoriteSorting": "true",
+            "limit": "20000",
+            "enableImageTypes": "Primary",
+        }
+        return (self._call("GET", "/LiveTv/Channels", params) or {}).get("Items", [])
+
+    def guide(self, channel_ids: list[str], start: float, end: float) -> list[dict]:
+        """The guide's programmes on these channels between start and end (seconds), by start."""
+        stamp = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))  # noqa: E731
+        params = {
+            "userId": self.user(),
+            "channelIds": ",".join(channel_ids),
+            "minEndDate": stamp(start),
+            "maxStartDate": stamp(end),
+            "SortBy": "StartDate",
+            "limit": "3000",
+        }
+        return (self._call("GET", "/LiveTv/Programs", params) or {}).get("Items", [])
+
+    def tuner_urls(self) -> list[str]:
+        """The M3U playlists Live TV's tuners read."""
+        found = (self._call("GET", "/System/Configuration/livetv") or {}).get("TunerHosts", [])
+        return [t["Url"] for t in found if t.get("Type") == "m3u" and t.get("Url")]
+
     def airing(self, kind: str = "", limit: int = 40) -> list[dict]:
         """The guide's programmes on now; kind: isSports, isNews, isKids or isMovie, or "" for all. (Not Jellyfin's
         Recommended: five times slower for the same programmes.)"""

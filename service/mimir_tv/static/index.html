@@ -209,6 +209,29 @@
   .epi .t { font-size:14px; font-weight:600; } .epi .s { font-size:12px; color:var(--dim); margin:2px 0; }
   .epi .o { font-size:12px; color:var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .epi.seen .t { color:var(--mute); }
+  /* Live TV: a channel list (logo, now with progress, next) and a guide grid (channels down, time across) */
+  .chl { grid-column:1/-1; display:flex; flex-direction:column; }
+  .chr { display:flex; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid #ffffff0d; cursor:pointer; }
+  .chr .lg { width:76px; height:44px; border-radius:8px; background:#ffffff0d center/contain no-repeat; flex:none; position:relative;
+             display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--dim); text-align:center; overflow:hidden; }
+  .chr .lg .h { position:absolute; top:2px; right:4px; color:#ff5a6e; font-size:11px; }
+  .chr .nm { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chr .now { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chr .nx { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chr .pg { height:3px; background:#ffffff1a; border-radius:2px; margin:4px 0 3px; } .chr .pg i { display:block; height:100%; background:var(--accent); border-radius:2px; }
+  .gd { grid-column:1/-1; overflow-x:auto; margin:0 -16px; padding:0 16px; scrollbar-width:none; } .gd::-webkit-scrollbar { display:none; }
+  @media (min-width:700px) { .gd { margin:0 -32px; padding:0 32px; } }
+  .gd .times, .gd .gr { display:flex; position:relative; }
+  .gd .times { height:26px; font-size:11px; color:var(--dim); }
+  .gd .times span { position:absolute; top:6px; }
+  .gd .cell { position:sticky; left:0; z-index:2; width:76px; flex:none; background:var(--bg); padding:3px 6px 3px 0; }
+  .gd .cell .lg { width:70px; height:42px; border-radius:6px; background:#ffffff0d center/contain no-repeat; display:flex; align-items:center;
+                  justify-content:center; font-size:10px; font-weight:700; color:var(--dim); text-align:center; overflow:hidden; }
+  .gd .track { position:relative; height:48px; flex:none; }
+  .gd .pb { position:absolute; top:3px; bottom:3px; border-radius:6px; background:#ffffff0f; padding:4px 7px; font-size:12px; overflow:hidden;
+            white-space:nowrap; text-overflow:ellipsis; color:var(--mute); cursor:pointer; border-left:1px solid var(--bg); }
+  .gd .pb.on { background:#7A28FE40; color:var(--ink); font-weight:600; }
+  .gd .nowline { position:absolute; top:0; bottom:0; width:2px; background:var(--accent); z-index:1; pointer-events:none; }
   .wh .row a.alt:has(.gico) { width:42px; height:42px; padding:0; border-radius:50%; background:#ffffff1a; display:inline-flex; align-items:center;
                               justify-content:center; color:var(--ink); }
   .wh .row .gico { border:0; font-size:16px; }
@@ -971,22 +994,56 @@ async function personPage(id) {
   bindTiles(true);
 }
 
-// Live TV (Wholphin's, from Jellyfin's Live TV): your channels, then what the guide has on now, all and by kind;
-// each card plays its channel, with how far in the programme is.
-async function livePage() {
+// Live TV, as Streamyfin and Wholphin show it (favourites first, every channel, the guide), in the provider's groups
+// (Jellyfin keeps none: the Air reads them from the tuner's playlist). Channels: logo, now with progress, next.
+// Guide: channels down, the next three hours across. A channel or a programme opens the channel's card (▶, 📺, ♥).
+let liveView = {view: "channels", group: "", fav: false, items: [], total: 0, groups: []};
+const PX = 4;  // the guide: pixels a minute
+async function livePage(more) {
   crumbs = [{title: "Live TV", node: "__live"}]; renderTrail();
   document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x.dataset.tab === "live"));
-  const [list, live] = await Promise.all([loadList(), api("/api/jf/live").catch(() => ({rows: []}))]);
+  const v = liveView;
+  if (!more) v.items = [];
+  const q = new URLSearchParams({offset: v.items.length, limit: 40, hours: 3});
+  if (v.group) q.set("group", v.group);
+  if (v.fav) q.set("fav", "true");
+  const got = await api("/api/jf/channels?" + q).catch(e => { toast(e.message); return {channels: [], groups: [], total: 0}; });
+  v.items = v.items.concat(got.channels); v.total = got.total; if (got.groups.length) v.groups = got.groups;
   pool = [];
   current = {node: "__live", title: "Live TV", items: [], videos: []};
-  const head = name => `<div class="rowhead"><h3>${esc(name)}</h3></div>`;
-  let html = "";
-  const mine = list.filter(i => i.live);
-  if (mine.length) html += head("Your channels") + `<div class="strip">${mine.map(i => tile(i)).join("")}</div>`;
-  for (const r of live.rows) html += head(r.name) + `<div class="strip wide">${r.items.map(p => tile(p, p.channel, true)).join("")}</div>`;
-  if (!mine.length && !live.rows.length) html += `<div class="full mute">No TV guide yet. Live TV's guide fills once a guide source is set (Jellyfin: Live TV, guide data).</div>`;
+  const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
+  let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
+    + `<div class="chips line">${chip(!v.group && !v.fav, "All", 'data-group=""')}${chip(v.fav, "♥ Favourites", "data-fav")}`
+    + v.groups.map(g => chip(v.group === g.name, `${esc(g.name)}<small>${g.count}</small>`, `data-group="${esc(g.name)}"`)).join("") + `</div>`;
+  const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
+  const hm = t => new Date(t).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
+  const logo = c => `<div class="lg"${c.thumb ? ` style="background-image:url('${c.thumb}')"` : ""}>${c.thumb ? "" : esc(c.name)}${c.fav ? `<span class="h">♥</span>` : ""}</div>`;
+  if (!v.items.length) html += `<div class="full mute" style="margin-top:8px">${v.fav ? "No favourite channels yet: ♥ a channel to keep it first." : "No channels here."}</div>`;
+  else if (v.view === "channels") {
+    html += `<div class="chl">${v.items.map((c, k) => {
+      const now = c.programmes.find(p => p.on_now), next = c.programmes.find(p => !p.on_now);
+      return `<div class="chr" data-ch="${k}">${logo(c)}<div class="grow"><div class="nm">${esc([c.number, c.name].filter(Boolean).join("  "))}</div>`
+        + (now ? `<div class="now">${esc(now.title)}</div><div class="pg"><i style="width:${now.progress}%"></i></div>` : `<div class="now" style="color:var(--dim);font-weight:400">No guide</div>`)
+        + (next ? `<div class="nx">Next ${hm(next.start)} · ${esc(next.title)}</div>` : "") + `</div></div>`;
+    }).join("")}</div>`;
+  } else {
+    const t0 = Math.floor(Date.now() / 1800000) * 1800000, span = 3 * 60, width = span * PX;
+    const x = t => Math.max(0, Math.min(width, (Date.parse(t) - t0) / 60000 * PX));
+    let times = "";
+    for (let m = 0; m <= span; m += 30) times += `<span style="left:${76 + m * PX}px">${hm(t0 + m * 60000)}</span>`;
+    html += `<div class="gd"><div class="times" style="width:${76 + width}px">${times}</div>`
+      + v.items.map((c, k) => `<div class="gr"><div class="cell" data-ch="${k}">${logo(c)}</div><div class="track" style="width:${width}px">`
+        + `<div class="nowline" style="left:${(Date.now() - t0) / 60000 * PX}px"></div>`
+        + c.programmes.map(p => { const l = x(p.start), w = x(p.end) - l; return w < 6 ? "" : `<div class="pb${p.on_now ? " on" : ""}" data-ch="${k}" style="left:${l}px;width:${w}px" title="${esc(p.title)}">${esc(p.title)}</div>`; }).join("")
+        + `</div></div>`).join("") + `</div>`;
+  }
+  if (v.items.length < v.total) html += `<div class="full" style="text-align:center;margin:14px 0"><button data-more>More channels (${v.total - v.items.length} more)</button></div>`;
   $("#grid").innerHTML = html;
-  bindTiles(true);
+  $("#grid").querySelectorAll("[data-view]").forEach(b => b.onclick = () => { v.view = b.dataset.view; livePage(); });
+  $("#grid").querySelectorAll("[data-group]").forEach(b => b.onclick = () => { v.group = b.dataset.group; v.fav = false; livePage(); });
+  $("#grid").querySelectorAll("[data-fav]").forEach(b => b.onclick = () => { v.fav = !v.fav; v.group = ""; livePage(); });
+  $("#grid").querySelectorAll("[data-ch]").forEach(d => d.onclick = () => videoSheet(cardOf(v.items[+d.dataset.ch])));
+  const moreBtn = $("#grid [data-more]"); if (moreBtn) moreBtn.onclick = () => livePage(true);
 }
 
 // A show, as Wholphin's: the header's main button plays the next episode, then season tabs and the episodes.

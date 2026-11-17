@@ -13,6 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -237,6 +238,7 @@ def router(
     phone_app: Callable[[], str] = lambda: "swiftfin",
     tvs: Tvs | None = None,
     live_roots: Callable[[], list[str]] = list,
+    fetch: Callable[[str], str] | None = None,
 ) -> APIRouter:
     """hidden: the providers' own libraries, shown in each provider's section instead of Your library. tvs: the TVs
     in Settings, so a play can name one (open_app and play_app then take its address as tv=). live_roots: the
@@ -279,6 +281,78 @@ def router(
             return []
         out = [programme(p) for p in guard(jf.programmes, q) if p.get("ChannelId") and named(q, p)]
         return sorted(out, key=lambda x: (not x["on_now"], x["start"]))
+
+    fetch = fetch or (lambda url: httpx.get(url, timeout=30, follow_redirects=True).text)
+    chans: dict = {"at": 0.0, "list": [], "groups_at": 0.0, "groups": {}}  # Live TV's channels; the tuners' groups
+
+    def channel_list() -> list[dict]:
+        """Jellyfin's channels, kept two minutes (5,000 and more: asked for once, not on every page)."""
+        if time.time() - chans["at"] > 120:
+            chans["list"], chans["at"] = guard(jf.all_channels), time.time()
+        return chans["list"]
+
+    def tuner_groups() -> dict[str, str]:
+        """A channel's group (group-title) by its name, read from the playlists Live TV's tuners read (Jellyfin keeps
+        no groups), in the playlists' order; kept an hour."""
+        if time.time() - chans["groups_at"] > 3600:
+            groups: dict[str, str] = {}
+            try:
+                for url in jf.tuner_urls():
+                    for m in re.finditer(r'#EXTINF[^\n]*?group-title="([^"]*)"[^\n]*,([^\n]*)', fetch(url)):
+                        groups.setdefault(m.group(2).strip(), m.group(1).strip())
+            except (JellyfinError, httpx.HTTPError):
+                pass  # no groups this time
+            chans["groups"], chans["groups_at"] = groups, time.time()
+        return chans["groups"]
+
+    @api.get("/api/jf/channels")
+    def channels(
+        group: str = Query("", max_length=200),
+        fav: bool = False,
+        offset: int = Query(0, ge=0),
+        limit: int = Query(40, ge=1, le=200),
+        hours: int = Query(3, ge=1, le=12),
+    ):
+        """Live TV as Jellyfin's apps list it (favourites first, then by number), in its tuner's groups, a page at a
+        time; each channel with its guide for the next hours (the Channels and the Guide views)."""
+        groups = tuner_groups()
+        listed = channel_list()
+        counts: dict[str, int] = {}
+        for c in listed:
+            g = groups.get(c.get("Name", "").strip())
+            if g:
+                counts[g] = counts.get(g, 0) + 1
+        order = list(dict.fromkeys(groups.values()))
+        wanted = [
+            c
+            for c in listed
+            if (not group or groups.get(c.get("Name", "").strip()) == group)
+            and (not fav or (c.get("UserData") or {}).get("IsFavorite"))
+        ]
+        page = wanted[offset : offset + limit]
+        now = time.time()
+        shows: dict[str, list[dict]] = {}
+        if page:
+            for p in guard(jf.guide, [c["Id"] for c in page], now, now + hours * 3600):
+                if p.get("ChannelId") and not FILLER.match(p.get("Name") or ""):
+                    shows.setdefault(p["ChannelId"], []).append(programme(p))
+        keep = ("title", "start", "end", "on_now", "progress")
+        return {
+            "groups": [{"name": g, "count": counts[g]} for g in order if counts.get(g)],
+            "total": len(wanted),
+            "channels": [
+                {
+                    "id": c["Id"],
+                    "name": c.get("Name", ""),
+                    "number": c.get("ChannelNumber") or "",
+                    "thumb": card(c)["thumb"],
+                    "fav": bool((c.get("UserData") or {}).get("IsFavorite")),
+                    "group": groups.get(c.get("Name", "").strip(), ""),
+                    "programmes": [{k: p[k] for k in keep} for p in shows.get(c["Id"], [])],
+                }
+                for c in page
+            ],
+        }
 
     @api.get("/api/jf/live")
     def live_tv():
@@ -558,6 +632,7 @@ def router(
 
     @api.post("/api/jf/list", status_code=201)
     def add_to_list(body: Play):
+        chans["at"] = 0.0  # a channel's ♥: Live TV's order changes
         item = guard(jf.item, body.id)
         found = card(item)
         t = twin(item) if live(item) else None
@@ -579,6 +654,7 @@ def router(
 
     @api.delete("/api/jf/list", status_code=204)
     def remove_from_list(id: str = Query(pattern=ID)):
+        chans["at"] = 0.0
         pid, channels = live_list()
         entries = [c["PlaylistItemId"] for c in channels if c["Id"] == id]
         if entries:

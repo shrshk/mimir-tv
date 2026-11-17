@@ -142,8 +142,10 @@ are files readable by you only.
 - **Looks like Wholphin** (as if it had an iPhone app): its purple-dark colours; Home's header is what you are
   watching (its backdrop, facts with when it ends, Resume), then wide Continue watching cards with the time left; a
   title's page has its facts, genres, ✓ watched, ♥ My list and its cast and crew; a show's page plays the next
-  episode from its main button, with season tabs and episodes showing progress, watched and new; a Live TV tab shows
-  your channels and what the guide has on now, all and by kind (sports, news, kids, movies). Doodle stays as the
+  episode from its main button, with season tabs and episodes showing progress, watched and new; a Live TV tab lists
+  every channel as Streamyfin and Wholphin do (favourites first) in the provider's groups (Telugu · News, Sports ·
+  Cricket …, read from the tuner's playlist, since Jellyfin keeps none), each with what is on now and next, or as a
+  guide (channels down, the next three hours across). Doodle stays as the
   other theme (the pencil button).
 - **Adding what is missing**: a provider's title has two buttons. ＋ Jellyfin adds it to the library as `.strm`
   files (a show, a movie or a live channel); ＋ My list adds it and makes it a favourite. Jellyfin's search index is

@@ -83,6 +83,7 @@ PLAYED: list[tuple] = []
 TV_APP = {"Id": "tv", "Client": "Jellyfin Android TV", "SupportsRemoteControl": True, "PlayableMediaTypes": ["Video"]}
 USER_DATA: dict[str, dict] = {}  # the admin's data per item: position, played, favourite
 REPORTS: list[tuple] = []  # session reports: (event, body)
+TUNER_M3U = "#EXTM3U\n"  # the playlist Live TV's tuner reads (its groups: Jellyfin keeps none)
 SEARCHED: list[str] = []  # each search Jellyfin was asked (its term)
 PROGRAMMES: list[dict] = []  # the TV guide's programmes (Jellyfin's Live TV, from an XMLTV source)
 PLAYLISTS: dict[str, dict] = {}  # the user's playlists: id -> {"Name", "items": [item ids, in order]}
@@ -138,6 +139,25 @@ def fake(request: httpx.Request) -> httpx.Response:
         hits = [x for x in PROGRAMMES if any(w in x["Name"].lower() for w in words)]
         hits = [x for x in hits if x["EndDate"] > q["MinEndDate"] and x["StartDate"] < q["MaxStartDate"]]
         return httpx.Response(200, json={"Items": hits})
+    if p == "/LiveTv/Channels":  # Live TV's channels, favourites first when asked
+        assert q["userId"] == "u1"
+        chans = [i | {"UserData": USER_DATA.get(i["Id"], {})} for i in ITEMS.values() if i["Type"] == "TvChannel"]
+        chans.sort(key=lambda c: int(c.get("ChannelNumber") or 0))
+        if q.get("enableFavoriteSorting") == "true":
+            chans.sort(key=lambda c: not c["UserData"].get("IsFavorite"))
+        return httpx.Response(200, json={"Items": chans, "TotalRecordCount": len(chans)})
+    if p == "/System/Configuration/livetv":
+        return httpx.Response(
+            200, json={"TunerHosts": [{"Type": "m3u", "Url": "http://tuner.example/get.php?username=u"}]}
+        )
+    if p == "/LiveTv/Programs" and "channelIds" in q:  # a guide's window for some channels
+        ids = q["channelIds"].split(",")
+        hits = [
+            x
+            for x in PROGRAMMES
+            if x["ChannelId"] in ids and x["EndDate"] > q["minEndDate"] and x["StartDate"] < q["maxStartDate"]
+        ]
+        return httpx.Response(200, json={"Items": sorted(hits, key=lambda x: x["StartDate"])})
     if p == "/LiveTv/Programs":  # what is airing, by kind
         assert q["userId"] == "u1" and q["isAiring"] == "true"
         kind = next((k for k in ("isSports", "isNews", "isKids", "isMovie") if q.get(k) == "true"), None)
@@ -285,6 +305,7 @@ def setup(tmp_path):
                 dates=ListDates(tmp_path / "m.db"),
                 hidden=lambda: {"My IPTV"},
                 live_roots=lambda: [LIVE_ROOT],
+                fetch=lambda url: TUNER_M3U if url.startswith("http://tuner.example/") else "",
             ),
         )
     )
@@ -920,3 +941,57 @@ def test_live_tv_lists_whats_on_now_by_kind_each_card_playing_its_channel(tmp_pa
         ("Cricket: Final", "CH1", "ch1", "TvChannel", True)
     ]
     assert 30 <= sports[0]["progress"] <= 36  # 20 minutes into an hour
+
+
+def test_live_tvs_channels_come_in_the_tuners_groups_favourites_first_with_their_guide(tmp_path, monkeypatch):
+    aaj, star = "a1" * 16, "a2" * 16
+    monkeypatch.setitem(ITEMS, "9" * 32, ITEMS["9" * 32] | {"ChannelNumber": "1"})
+    monkeypatch.setitem(ITEMS, aaj, item(aaj, "AAJ TAK", "TvChannel", ChannelNumber="2"))
+    monkeypatch.setitem(ITEMS, star, item(star, "STAR SPORTS 1", "TvChannel", ChannelNumber="3"))
+    monkeypatch.setattr(
+        "tests.test_jf.TUNER_M3U",
+        "#EXTM3U\n"
+        '#EXTINF:-1 tvg-id="1" tvg-name="NDTV 24x7" group-title="English · News",NDTV 24x7\nhttp://x/1.ts\n'
+        '#EXTINF:-1 tvg-id="2" tvg-name="AAJ TAK" group-title="Hindi · News",AAJ TAK\nhttp://x/2.ts\n'
+        '#EXTINF:-1 tvg-id="3" tvg-name="STAR SPORTS 1" group-title="Sports · Cricket",STAR SPORTS 1\nhttp://x/3.ts\n',
+    )
+
+    def at(minutes):
+        return time.strftime("%Y-%m-%dT%H:%M:%S.0000000Z", time.gmtime(time.time() + minutes * 60))
+
+    def show(name, start, end):
+        return {"Id": f"p-{name}", "Name": name, "StartDate": at(start), "EndDate": at(end), "ChannelId": aaj}
+
+    monkeypatch.setattr(
+        "tests.test_jf.PROGRAMMES", [show("Bulletin", -20, 40), show("Late News", 40, 100), show("Tomorrow", 600, 660)]
+    )
+    _, c, _ = setup(tmp_path)
+    USER_DATA[star] = {"IsFavorite": True}
+
+    live = c.get("/api/jf/channels").json()
+    assert live["groups"] == [
+        {"name": "English · News", "count": 1},
+        {"name": "Hindi · News", "count": 1},
+        {"name": "Sports · Cricket", "count": 1},
+    ]
+    # Favourites first (as Streamyfin and Wholphin list them), then by number; each with its group and guide.
+    assert [(x["name"], x["fav"], x["group"]) for x in live["channels"]] == [
+        ("STAR SPORTS 1", True, "Sports · Cricket"),
+        ("NDTV 24x7", False, "English · News"),
+        ("AAJ TAK", False, "Hindi · News"),
+    ]
+    aaj_tak = live["channels"][2]
+    assert [(p["title"], p["on_now"]) for p in aaj_tak["programmes"]] == [("Bulletin", True), ("Late News", False)]
+    assert 30 <= aaj_tak["programmes"][0]["progress"] <= 36  # the guide's next three hours; "Tomorrow" is past them
+    assert aaj_tak["thumb"].startswith(f"/jf/Items/{aaj}/Images/Primary")
+    assert live["total"] == 3
+
+    # A group, the favourites, a page at a time.
+    assert [x["name"] for x in c.get("/api/jf/channels", params={"group": "Hindi · News"}).json()["channels"]] == [
+        "AAJ TAK"
+    ]
+    assert [x["name"] for x in c.get("/api/jf/channels", params={"fav": "true"}).json()["channels"]] == [
+        "STAR SPORTS 1"
+    ]
+    page = c.get("/api/jf/channels", params={"offset": 1, "limit": 1}).json()
+    assert ([x["name"] for x in page["channels"]], page["total"]) == (["NDTV 24x7"], 3)
