@@ -134,7 +134,7 @@ def fake(request: httpx.Request) -> httpx.Response:
         hits = [x for x in PROGRAMMES if any(w in x["Name"].lower() for w in words)]
         hits = [x for x in hits if x["EndDate"] > q["MinEndDate"] and x["StartDate"] < q["MaxStartDate"]]
         return httpx.Response(200, json={"Items": hits})
-    if p == "/LiveTv/Programs/Recommended":  # what is airing, by kind
+    if p == "/LiveTv/Programs":  # what is airing, by kind
         assert q["userId"] == "u1" and q["isAiring"] == "true"
         kind = next((k for k in ("isSports", "isNews", "isKids", "isMovie") if q.get(k) == "true"), None)
         hits = [x for x in PROGRAMMES if not kind or x.get(kind[0].upper() + kind[1:])]

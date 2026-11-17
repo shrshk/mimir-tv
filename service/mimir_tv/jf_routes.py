@@ -6,6 +6,7 @@ key on the Air. Files Safari plays as they are (MP4/MOV with H.264/HEVC) stream 
 through Jellyfin's HLS, which converts on the Air's hardware."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -278,21 +279,17 @@ def router(
     def live_tv():
         """The Live TV tab: what the guide has on now, all and by kind (Jellyfin's Live TV sections, as Wholphin
         shows them); a kind with nothing on is left out."""
-        rows = []
-        for name, kind in (
-            ("On now", ""),
-            ("Sports", "isSports"),
-            ("News", "isNews"),
-            ("Kids", "isKids"),
-            ("Movies", "isMovie"),
-        ):
+        kinds = (("On now", ""), ("Sports", "isSports"), ("News", "isNews"), ("Kids", "isKids"), ("Movies", "isMovie"))
+
+        def row(kind: str) -> list[dict]:
             try:
-                items = [programme(p) for p in jf.airing(kind) if p.get("ChannelId")]
+                return [programme(p) for p in jf.airing(kind) if p.get("ChannelId")]
             except JellyfinError:
-                items = []
-            if items:
-                rows.append({"name": name, "items": items})
-        return {"rows": rows}
+                return []
+
+        with ThreadPoolExecutor(max_workers=len(kinds)) as pool:  # each a Jellyfin call of a second or two
+            found = list(pool.map(row, [k for _, k in kinds]))
+        return {"rows": [{"name": name, "items": items} for (name, _), items in zip(kinds, found) if items]}
 
     @api.post("/api/jf/watched")
     def watched(body: Watched):

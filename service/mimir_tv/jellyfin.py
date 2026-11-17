@@ -149,12 +149,12 @@ class Jellyfin:
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
 
     def airing(self, kind: str = "", limit: int = 40) -> list[dict]:
-        """The guide's programmes on now (Jellyfin's Live TV recommendations); kind: isSports, isNews, isKids or
-        isMovie, or "" for all."""
+        """The guide's programmes on now; kind: isSports, isNews, isKids or isMovie, or "" for all. (Not Jellyfin's
+        Recommended: five times slower for the same programmes.)"""
         params = {"userId": self.user(), "isAiring": "true", "limit": str(limit), "Fields": "ChannelInfo,Overview"}
         if kind:
             params[kind] = "true"
-        return (self._call("GET", "/LiveTv/Programs/Recommended", params) or {}).get("Items", [])
+        return (self._call("GET", "/LiveTv/Programs", params) or {}).get("Items", [])
 
     def people(self, q: str, limit: int = 20) -> list[dict]:
         """People (cast and crew) whose name matches the search, as Jellyfin's search matches: loosely."""
