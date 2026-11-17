@@ -1,6 +1,7 @@
 # mimir-tv
 
-Fills your Jellyfin library and finds what is missing from it. mimir-tv has two parts:
+A Jellyfin library explorer and catalogue maintainer. It keeps your Jellyfin catalogue filled and finds what is
+missing from it. mimir-tv has two parts:
 
 - **On the Mac, it fills Jellyfin.** It adds a provider's whole catalogue and the popular titles on your streaming
   apps, in your languages. It draws badges on posters and sets up Wholphin's home rows and collections. Every Jellyfin

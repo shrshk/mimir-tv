@@ -1,7 +1,7 @@
 [project]
 name = "mimir-tv"
 version = "0.1.0"
-description = "Your own streaming front end: manage what Jellyfin shows, search, and play on the phone, Mac or TV."
+description = "A Jellyfin library explorer and catalogue maintainer: fills the catalogue, finds and adds what is missing."
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
