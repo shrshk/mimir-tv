@@ -17,14 +17,22 @@ def test_live_tv_asks_for_the_houses_languages_only_where_a_tuner_takes_groups()
         "Url": "http://127.0.0.1:8723/get.php?username&password&groups=Telugu&output=ts",
     }
     other = {"Id": "b", "Type": "m3u", "Url": "http://iptv.example/list.m3u"}
-    posted = []
+    guide = {
+        "Id": "g",
+        "Type": "xmltv",
+        "Path": "http://127.0.0.1:8723/xmltv.php?username&password&groups=Telugu&hours=24",
+    }
+    posted, guides = [], []
 
     def handler(request):
         if request.url.path == "/System/Configuration/livetv":
-            return httpx.Response(200, json={"TunerHosts": [plugin, other]})
+            return httpx.Response(200, json={"TunerHosts": [plugin, other], "ListingProviders": [guide]})
         if request.url.path == "/LiveTv/TunerHosts" and request.method == "POST":
             posted.append(json.loads(request.content))
             return httpx.Response(200, json={"Id": posted[-1]["Id"]})
+        if request.url.path == "/LiveTv/ListingProviders" and request.method == "POST":
+            guides.append(json.loads(request.content))
+            return httpx.Response(200, json={"Id": guides[-1]["Id"]})
         return httpx.Response(404)
 
     jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(handler))
@@ -32,6 +40,10 @@ def test_live_tv_asks_for_the_houses_languages_only_where_a_tuner_takes_groups()
     # Only the groups change (the rest of the address as it was, the same tuner updated by its id).
     want = "http://127.0.0.1:8723/get.php?username&password&groups=Telugu,Hindi,English&output=ts"
     assert posted == [plugin | {"Url": want}]
+    # The guide Jellyfin reads asks for the same channels (its small copy: xmltv.php?groups=), so it stays small.
+    assert guides == [
+        guide | {"Path": "http://127.0.0.1:8723/xmltv.php?username&password&groups=Telugu,Hindi,English&hours=24"}
+    ]
     assert into.set_live_groups(jf, []) == 0 and len(posted) == 1  # no languages: left as it is
 
 

@@ -56,11 +56,18 @@ def set_live_groups(jf: Jellyfin, groups: list[str]) -> int:
         return 0
     want = "groups=" + quote(",".join(groups), safe=",")
     changed = 0
-    for t in (jf._call("GET", "/System/Configuration/livetv") or {}).get("TunerHosts", []):
+    config = jf._call("GET", "/System/Configuration/livetv") or {}
+    for t in config.get("TunerHosts", []):
         url = t.get("Url") or ""
         if GROUPS.search(url) and GROUPS.sub(want, url) != url:
             jf._call("POST", "/LiveTv/TunerHosts", body=t | {"Url": GROUPS.sub(want, url)})
             changed += 1
+    # A guide that takes groups (a provider plugin's small xmltv.php for Jellyfin) follows: the same channels only,
+    # as Jellyfin's guide refresh reads the whole guide once per channel.
+    for g in config.get("ListingProviders", []):
+        path = g.get("Path") or ""
+        if GROUPS.search(path) and GROUPS.sub(want, path) != path:
+            jf._call("POST", "/LiveTv/ListingProviders", body=g | {"Path": GROUPS.sub(want, path)})
     return changed
 
 
