@@ -1019,9 +1019,9 @@ async function livePage(more) {
   const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
   let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
     // The provider's categories (60 and more) in a sheet with a search, not a line of chips: the pick shows here.
-    + `<div class="chips line">${chip(!v.group && !v.fav, "All", 'data-group=""')}${chip(v.fav, "♥ Favourites", "data-fav")}`
-    + (v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group=""') + chip(false, "▾", 'data-pick aria-label="Change category"') : chip(false, "Categories ▾", "data-pick"))
-    + `</div>`;
+    // The picked category first, with ✕ (back to all); Categories ▾ stays, to search again.
+    + `<div class="chips line">${v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group="" aria-label="Clear category"') : chip(!v.fav, "All", 'data-group=""')}`
+    + `${chip(v.fav, "♥ Favourites", "data-fav")}${chip(false, "Categories ▾", "data-pick")}</div>`;
   const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
   const hm = t => new Date(t).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
   const logo = c => `<div class="lg"${c.thumb ? ` style="background-image:url('${c.thumb}')"` : ""}>${c.thumb ? "" : esc(c.name)}${c.fav ? `<span class="h">♥</span>` : ""}</div>`;
@@ -1071,6 +1071,7 @@ function pickGroup() {
   };
   $("#gq").oninput = draw; draw();
   $("#dlg").classList.add("sheet"); $("#dlg").showModal();
+  $("#gq").blur();  // a sheet focuses its first field: the keyboard waits for a tap on the search box
 }
 
 // A show, as Wholphin's: the header's main button plays the next episode, then season tabs and the episodes.
