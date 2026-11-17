@@ -1206,7 +1206,11 @@ async function home() {
   const once = items => items.filter(i => !shown.has(i.id) && shown.add(i.id));
   for (const [title, items] of [["Continue watching", jfRows.resume], ["Next up", jfRows.next_up], ["New episodes", jfRows.new]]) {
     const left = once(items);
-    if (left.length) html += head(title) + strip(left, true);  // Wholphin's wide cards
+    // Wholphin's wide cards where most have a wide picture (a still, a backdrop); else posters (a provider's titles
+    // have only those), with what is left under each.
+    const wide = left.filter(i => i.wide).length * 2 >= left.length;
+    if (left.length) html += head(title) + (wide ? strip(left, true)
+      : `<div class="strip">${left.map(i => tile(i, [i.show_title ? i.title : "", leftOf(i)].filter(Boolean).join(" · ") || i.sub)).join("")}</div>`);
   }
   if (recs.items.length) html += head("Worth the hype on your apps", "__recs") + strip(recs.items.map(recTile));
   const titles = list.filter(i => !i.live), channels = list.filter(i => i.live);
