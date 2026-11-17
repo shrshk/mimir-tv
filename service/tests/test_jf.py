@@ -245,7 +245,10 @@ def fake(request: httpx.Request) -> httpx.Response:
             data["IsFavorite"] = request.method == "POST"
         return httpx.Response(200, json=data)
     if p == "/Items" and q.get("Filters") == "IsFavorite":
-        return httpx.Response(200, json={"Items": [ITEMS[i] for i, d in USER_DATA.items() if d.get("IsFavorite")]})
+        # Only items that still exist (a test's own items go when it ends; their marks may stay behind)
+        return httpx.Response(
+            200, json={"Items": [ITEMS[i] for i, d in USER_DATA.items() if d.get("IsFavorite") and i in ITEMS]}
+        )
     if p == f"/Shows/{SHOW}/Episodes":
         eps = [ITEMS[EP1], ITEMS[EP2]]
         if "startItemId" not in q:  # the whole show, with each episode's watch state, as a user sees it
