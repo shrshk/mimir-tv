@@ -381,7 +381,7 @@ class Jellyfin:
         return next((e for e in after if e.get("Id") != item["Id"]), None)
 
     # My list's titles in the home library are the user's Jellyfin favourites (P3).
-    LISTED = "Movie,Series,Season,Episode,Video,MusicVideo,Folder,BoxSet"
+    LISTED = "Movie,Series,Season,Episode,Video,MusicVideo,Folder,BoxSet,TvChannel"
 
     def favourites(self) -> list[dict]:
         params = {
@@ -438,6 +438,21 @@ class Jellyfin:
         else:
             body = {"Name": name, "Ids": [item_id], "UserId": self.user(), "MediaType": "Video"}
             self._call("POST", "/Playlists", None, body)
+
+    def channels_named(self, name: str) -> list[dict]:
+        """Live TV channels Jellyfin's search finds for this name (loosely: the caller checks the name)."""
+        params = {
+            "userId": self.user(),
+            "SearchTerm": name,
+            "IncludeItemTypes": "TvChannel",
+            "Recursive": "true",
+            "Limit": "20",
+            "Fields": self.FIELDS,
+        }
+        return (self._call("GET", "/Items", params) or {}).get("Items", [])
+
+    def delete_item(self, item_id: str) -> None:
+        self._call("DELETE", f"/Items/{item_id}")
 
     def remove_from_playlist(self, playlist_id: str, entry_ids: list[str]) -> None:
         self._call("DELETE", f"/Playlists/{playlist_id}/Items", {"EntryIds": ",".join(entry_ids)})

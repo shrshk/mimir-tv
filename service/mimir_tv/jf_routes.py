@@ -6,6 +6,7 @@ key on the Air. Files Safari plays as they are (MP4/MOV with H.264/HEVC) stream 
 through Jellyfin's HLS, which converts on the Air's hardware."""
 
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 import unicodedata
 from collections.abc import Callable
@@ -498,19 +499,58 @@ def router(
         pid = guard(jf.playlist, LIVE_LIST)
         return pid, guard(jf.playlist_items, pid) if pid else []
 
+    twins: dict[str, tuple[float, dict | None]] = {}  # a provider live video -> (when looked, its Live TV channel)
+
+    def twin(i: dict) -> dict | None:
+        """The Live TV channel (Jellyfin's tuner, with the guide) of a provider's live video: the same name. Looked up
+        again after a day, so a channel the tuner adds later is found."""
+        seen = twins.get(i["Id"])
+        if seen and time.time() - seen[0] < 86400:
+            return seen[1]
+        key = re.sub(r"[^a-z0-9]", "", (i.get("Name") or "").lower())
+        try:
+            found = next(
+                (c for c in jf.channels_named(i["Name"]) if re.sub(r"[^a-z0-9]", "", c["Name"].lower()) == key), None
+            )
+        except JellyfinError:
+            return None  # asked again next time
+        twins[i["Id"]] = (time.time(), found)
+        return found
+
+    def tidy(pid: str, left: list[dict]) -> None:
+        """The Live channels list, empty: gone (no empty row in Wholphin)."""
+        if pid and not left:
+            guard(jf.delete_item, pid)
+
     @api.get("/api/jf/list")
     def listed():
-        """Newest on My list first (added: when, in seconds; live: in the Live channels playlist). A live channel
-        made a favourite in a Jellyfin app moves to that playlist here."""
+        """Newest on My list first (added: when, in seconds; live: a live channel). A provider's live channel is its
+        Live TV channel, a favourite there (apps show favourite channels first in Live TV and its guide): one put
+        on the Live channels list earlier, or made a favourite in an app as a video, moves there here; one with no
+        Live TV channel stays on (or goes to) the list."""
         found = {i["Id"]: i for i in guard(jf.favourites)}
         pid, channels = live_list()
-        for i in [x for x in found.values() if live(x)]:
-            if i["Id"] not in {c["Id"] for c in channels}:
-                guard(jf.add_to_playlist, LIVE_LIST, i["Id"])
-                channels.append(i)
+        for i in [x for x in found.values() if live(x)]:  # a video favourited in an app
             guard(jf.set_favourite, i["Id"], False)
             del found[i["Id"]]
-        everything = {i["Id"]: (i, False) for i in found.values()} | {c["Id"]: (c, True) for c in channels}
+            t = twin(i)
+            if t:
+                guard(jf.set_favourite, t["Id"], True)
+                found[t["Id"]] = t
+            elif i["Id"] not in {c["Id"] for c in channels}:
+                guard(jf.add_to_playlist, LIVE_LIST, i["Id"])
+                pid, channels = live_list()
+        moved = [(c, t) for c in channels if (t := twin(c))]
+        if moved:
+            guard(jf.remove_from_playlist, pid, [c["PlaylistItemId"] for c, _ in moved])
+            for _, t in moved:
+                guard(jf.set_favourite, t["Id"], True)
+                found[t["Id"]] = t
+            channels = [c for c in channels if c["Id"] not in {m["Id"] for m, _ in moved}]
+            tidy(pid, channels)
+        everything = {i["Id"]: (i, i.get("Type") == "TvChannel") for i in found.values()} | {
+            c["Id"]: (c, True) for c in channels
+        }
         library = {i: since(x.get("DateCreated")) for i, (x, _) in everything.items()}
         added = dates.added(library) if dates else library
         cards = (card(x) | {"added": added[i], "live": on} for i, (x, on) in everything.items())
@@ -520,7 +560,12 @@ def router(
     def add_to_list(body: Play):
         item = guard(jf.item, body.id)
         found = card(item)
-        if live(item):
+        t = twin(item) if live(item) else None
+        if t:  # its Live TV channel, a favourite
+            if guard(jf.user_data, t["Id"]).get("IsFavorite"):
+                return {"added": [], "already": [found["title"]]}
+            guard(jf.set_favourite, t["Id"], True)
+        elif live(item):
             if any(c["Id"] == body.id for c in live_list()[1]):
                 return {"added": [], "already": [found["title"]]}
             guard(jf.add_to_playlist, LIVE_LIST, body.id)
@@ -538,6 +583,7 @@ def router(
         entries = [c["PlaylistItemId"] for c in channels if c["Id"] == id]
         if entries:
             guard(jf.remove_from_playlist, pid, entries)
+            tidy(pid, [c for c in channels if c["Id"] != id])
         elif guard(jf.user_data, id).get("IsFavorite"):
             guard(jf.set_favourite, id, False)
         else:

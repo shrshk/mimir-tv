@@ -102,6 +102,9 @@ def fake(request: httpx.Request) -> httpx.Response:
         pid = f"pl{len(PLAYLISTS) + 1}"
         PLAYLISTS[pid] = {"Name": body["Name"], "items": list(body["Ids"])}
         return httpx.Response(200, json={"Id": pid})
+    if p.startswith("/Items/") and request.method == "DELETE" and p.split("/")[2] in PLAYLISTS:
+        del PLAYLISTS[p.split("/")[2]]
+        return httpx.Response(204)
     if p.startswith("/Playlists/") and p.endswith("/Items"):
         pl = PLAYLISTS[p.split("/")[2]]
         if request.method == "POST":
@@ -576,32 +579,41 @@ def test_my_list_titles_in_the_library_are_jellyfin_favourites(tmp_path):
     assert c.delete("/api/jf/list", params={"id": "../Users"}).status_code == 422
 
 
-def test_live_channels_on_my_list_go_to_a_playlist_of_their_own(tmp_path, monkeypatch):
-    news, sports = "6" * 32, "7" * 32
+def test_live_channels_on_my_list_are_favourite_live_tv_channels(tmp_path, monkeypatch):
+    news, sports, espn = "6" * 32, "7" * 32, "8" * 32
+    news_tv, espn_tv = "8a" * 16, "8b" * 16
     monkeypatch.setitem(ITEMS, news, item(news, "News 24", "Video", Path=f"{LIVE_ROOT}/News 24/News 24.strm"))
     monkeypatch.setitem(ITEMS, sports, item(sports, "Sports 1", "Video", Path=f"{LIVE_ROOT}/Sports 1/Sports 1.strm"))
+    monkeypatch.setitem(ITEMS, espn, item(espn, "ESPN 2 4K", "Video", Path=f"{LIVE_ROOT}/ESPN 2 4K/ESPN 2 4K.strm"))
+    # Jellyfin's own Live TV has the same provider's channels (its tuner), with the TV guide.
+    monkeypatch.setitem(ITEMS, news_tv, item(news_tv, "NEWS 24", "TvChannel"))
+    monkeypatch.setitem(ITEMS, espn_tv, item(espn_tv, "ESPN 2 4K", "TvChannel"))
     _, c, _ = setup(tmp_path)
+    PLAYLISTS["pl1"] = {"Name": "Live channels", "items": [espn]}  # put on the list before Live TV favourites
+    # A provider's live channel on My list is its Live TV channel, a favourite there: apps show favourite channels
+    # first in their Live TV channels and guide.
     assert c.post("/api/jf/list", json={"id": news}).json() == {"added": ["News 24"], "already": []}
-    assert not USER_DATA.get(news, {}).get("IsFavorite")  # the favourites keep movies and shows
-    assert [(p["Name"], p["items"]) for p in PLAYLISTS.values()] == [("Live channels", [news])]
+    assert USER_DATA[news_tv]["IsFavorite"] and not USER_DATA.get(news, {}).get("IsFavorite")
     assert c.post("/api/jf/list", json={"id": news}).json() == {"added": [], "already": ["News 24"]}
-    # A live channel made a favourite in a Jellyfin app moves to the list when My list is read; an IPTV channel
-    # (Jellyfin's own Live TV, whose guide uses the favourites) and a movie stay favourites.
+    # When My list is read: the list's channels and those favourited in an app as videos move to their Live TV
+    # channel; one with no Live TV channel stays on the list; a movie stays a favourite.
     USER_DATA[sports] = {"IsFavorite": True}
-    USER_DATA["9" * 32] = {"IsFavorite": True}
     USER_DATA[MOVIE] = {"IsFavorite": True}
     listed = c.get("/api/jf/list").json()
-    assert sorted((i["title"], i["live"]) for i in listed) == [
-        ("NDTV 24x7", False),
-        ("News 24", True),
-        ("Sports 1", True),
-        ("Wedding Film 4K", False),
+    assert sorted((i["title"], i["type"], i["live"]) for i in listed) == [
+        ("ESPN 2 4K", "TvChannel", True),
+        ("NEWS 24", "TvChannel", True),
+        ("Sports 1", "Video", True),
+        ("Wedding Film 4K", "Video", False),
     ]
-    assert not USER_DATA[sports]["IsFavorite"] and USER_DATA["9" * 32]["IsFavorite"]
-    assert list(PLAYLISTS.values())[0]["items"] == [news, sports]
-    assert c.delete("/api/jf/list", params={"id": news}).status_code == 204
-    assert list(PLAYLISTS.values())[0]["items"] == [sports]
-    assert c.delete("/api/jf/list", params={"id": news}).status_code == 404
+    assert USER_DATA[espn_tv]["IsFavorite"] and not USER_DATA[sports]["IsFavorite"]
+    assert PLAYLISTS["pl1"]["items"] == [sports]
+    assert c.delete("/api/jf/list", params={"id": news_tv}).status_code == 204
+    assert not USER_DATA[news_tv]["IsFavorite"]
+    assert c.delete("/api/jf/list", params={"id": news_tv}).status_code == 404
+    # The list's last channel off it: the list goes too (no empty row in Wholphin).
+    assert c.delete("/api/jf/list", params={"id": sports}).status_code == 204
+    assert PLAYLISTS == {}
 
 
 def test_my_list_shows_the_last_favourite_first_wherever_it_was_made(tmp_path, monkeypatch):

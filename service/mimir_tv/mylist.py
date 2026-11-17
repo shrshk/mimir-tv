@@ -2,7 +2,8 @@
 for a favourite, so mimir-tv notes when it first saw each one, to show the newest first. That is all it keeps.
 
 Picks from an assistant that are not in the library stay with the assistant (mimir-claw keeps its own list). A
-provider's live channels on My list are in a Jellyfin playlist of their own (LIVE_LIST), not the favourites."""
+provider's live channel on My list is its Live TV channel, a favourite (jf_routes.py); one with no Live TV channel is
+in a Jellyfin playlist of its own (LIVE_LIST)."""
 
 import sqlite3
 import threading
