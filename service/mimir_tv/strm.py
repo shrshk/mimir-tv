@@ -9,12 +9,17 @@ import re
 from pathlib import Path
 from urllib.parse import quote
 
+import httpx
+
+from mimir_tv import badges
 from mimir_tv.catalog import Catalog, CatalogError
 
 FOLLOWED = ".followed.json"  # shows added to Jellyfin (title: the show's page), checked for new episodes
 MIRRORED = ".mirrored.json"  # what the whole catalogue wrote (mirror.py): {link: {"name": its folder, "at"}}
 ADDED = ".added.json"  # movies added to Jellyfin by hand (folder names): the mirror's limit never removes them
 LIST_FOR = 6 * 3600  # how old a show's listing may be when it is written
+POSTER = "poster.jpg"  # a title's picture, next to its files: Jellyfin reads it on its next scan
+POSTER_MAX = 3_000_000
 
 
 def number(text: str) -> int | None:
@@ -75,6 +80,42 @@ def write_show(
     return files
 
 
+def has_poster(folder: Path) -> bool:
+    return (folder / POSTER).exists() or (folder / badges.ORIGINAL).exists()
+
+
+def save_poster(folder: Path, url: str, http: httpx.Client) -> bool:
+    """The picture at url as the title's poster (http or https, an image, at most POSTER_MAX bytes); whether it was
+    saved. A folder that has one keeps it."""
+    if not url.startswith(("http://", "https://")) or not folder.is_dir() or has_poster(folder):
+        return False
+    try:
+        r = http.get(url)
+    except httpx.HTTPError:
+        return False  # tried again next time
+    if (
+        r.status_code != 200
+        or not r.headers.get("content-type", "").startswith("image/")
+        or len(r.content) > POSTER_MAX
+    ):
+        return False
+    (folder / POSTER).write_bytes(r.content)
+    return True
+
+
+def show_poster(cat: Catalog, show_url: str, folder: Path, http: httpx.Client) -> bool:
+    """A show added by hand gets its listing's picture when it has none (the whole catalogue's posters reach only
+    the shows it lists); whether one was saved."""
+    if has_poster(folder):
+        return False
+    try:
+        items = cat.page(show_url, ttl=LIST_FOR)
+    except CatalogError:
+        return False
+    thumb = next((i["thumb"] for i in items if i.get("thumb")), "")
+    return save_poster(folder, thumb, http)
+
+
 def followed(root: Path) -> dict[str, str]:
     f = root / FOLLOWED
     return json.loads(f.read_text()) if f.exists() else {}
@@ -132,6 +173,16 @@ def refresh_shows(cat: Catalog, pid: str, root: Path, resolver: str, ttl: int = 
             continue
         new += len(set(files.values()) - before)
     return new
+
+
+def show_posters(cat: Catalog, root: Path, http: httpx.Client | None = None) -> int:
+    """A poster for each show added by hand that has none (show_poster); how many were saved."""
+    client = http or httpx.Client(timeout=20, follow_redirects=True)
+    try:
+        return sum(show_poster(cat, url, root / safe(title), client) for title, url in followed(root).items())
+    finally:
+        if http is None:
+            client.close()
 
 
 def write_movie(pid: str, url: str, title: str, root: Path, resolver: str, page: str = "") -> Path:

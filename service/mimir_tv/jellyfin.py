@@ -1,6 +1,7 @@
 """Jellyfin's library API, the parts the Library page needs. Uses an API key in the standard Authorization header
 (Jellyfin 10.11+ rejects the old X-Emby-Authorization header)."""
 
+import re
 import time
 
 import httpx
@@ -420,6 +421,45 @@ class Jellyfin:
             "Fields": self.FIELDS + ",DateCreated",
         }
         return (self._call("GET", "/Items", params) or {}).get("Items", [])
+
+    def posterless_favourites(self) -> list[str]:
+        """The favourite movies and shows that have no picture."""
+        params = {
+            "userId": self.user(),
+            "Recursive": "true",
+            "Filters": "IsFavorite",
+            "IncludeItemTypes": "Movie,Series",
+        }
+        items = (self._call("GET", "/Items", params) or {}).get("Items", [])
+        return [i["Id"] for i in items if "Primary" not in (i.get("ImageTags") or {})]
+
+    def fill_poster(self, item_id: str) -> bool:
+        """A movie or show with no picture gets one from Jellyfin's online sources (TMDB): the stream libraries
+        download none themselves, as they hold ~17,000 titles. One with no online id is looked up by its name, and
+        the picture taken only when exactly one result has that name. An episode fills its show. Returns whether a
+        picture was saved."""
+        found = (self._call("GET", "/Items", {"Ids": item_id, "userId": self.user()}) or {}).get("Items", [])
+        item = found[0] if found else {}
+        if item.get("Type") == "Episode" and item.get("SeriesId"):
+            return self.fill_poster(item["SeriesId"])
+        if item.get("Type") not in ("Movie", "Series") or "Primary" in (item.get("ImageTags") or {}):
+            return False
+        images = self._call("GET", f"/Items/{item_id}/RemoteImages", {"type": "Primary", "limit": "1"}) or {}
+        url = next((i["Url"] for i in images.get("Images", []) if i.get("Url")), "")
+        if not url:
+            name = re.sub(r"\s*\([^)]*\)$", "", item.get("Name", ""))  # "Bigg Boss (Telugu)": its section
+            info = {"Name": name} | ({"Year": item["ProductionYear"]} if item.get("ProductionYear") else {})
+            hits = self._call(
+                "POST", f"/Items/RemoteSearch/{item['Type']}", body={"SearchInfo": info, "ItemId": item_id}
+            )
+            same = [
+                h["ImageUrl"] for h in hits or [] if h.get("Name", "").lower() == name.lower() and h.get("ImageUrl")
+            ]
+            url = same[0] if len(same) == 1 else ""
+        if not url:
+            return False
+        self._call("POST", f"/Items/{item_id}/RemoteImages/Download", {"type": "Primary", "imageUrl": url})
+        return True
 
     def favourite_show_paths(self) -> list[str]:
         """Where each favourited show's folder is (mirror.py follows the mirrored ones)."""

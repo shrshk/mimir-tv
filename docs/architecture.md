@@ -104,7 +104,7 @@ sequenceDiagram
   TV->>R: GET /play?p=<id>&path=episode link
   R->>S: the plugin's link() (signed with its login, where it signs links)
   R-->>TV: 302 to the signed link
-  Note over A: Hourly: new episodes of added shows get .strm files and a scan
+  Note over A: Hourly: new episodes of added shows get .strm files and a scan; added shows and favourites without a picture get one
 ```
 
 ### Live TV
@@ -157,7 +157,7 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 |---|---|---|
 | `backup` | nightly 3:30 (when `backup_dir` is set) | mimir-tv's and Jellyfin's settings, lists and watch history; no keys or passwords |
 | `offsite` | after each backup | The backup folder to the rclone remote in settings (encrypted) |
-| `new-episodes` | hourly | New episodes of added shows into Jellyfin |
+| `new-episodes` | hourly | New episodes of added shows into Jellyfin; pictures for added shows and favourites that have none |
 | `whole-catalogue` | hourly | A provider's whole catalogue into Jellyfin (`mirror.py`), a batch of shows each run |
 | `on-my-apps` | daily | The streaming apps' popular titles into Jellyfin (`onapps.py`) |
 | `<id>-<job>` | the plugin's (checked hourly) | A provider's own jobs (catalog.Job), e.g. an index for search |
@@ -174,7 +174,7 @@ pushes the title to the OpenClaw iPhone app; any other URL gets an ntfy-style PO
 | [catalog.py](../service/mimir_tv/catalog.py) | The provider plugin interface (Catalog, Job), finding installed plugins, the providers in Settings and their catalogues |
 | [catalog_routes.py](../service/mimir_tv/catalog_routes.py) | A provider's pages (`/api/p/<id>/…`): home rows, browse, search, live, play, add to Jellyfin; thumbnails and the relay |
 | [providers.py](../service/mimir_tv/providers.py) | Settings' providers: IPTV (M3U, Xtream) through Jellyfin's Live TV, and adding a plugin provider |
-| [strm.py](../service/mimir_tv/strm.py) | `.strm` files for shows, movies and live channels; new episodes |
+| [strm.py](../service/mimir_tv/strm.py) | `.strm` files for shows, movies and live channels; new episodes; posters for titles added by hand |
 | [resolver.py](../service/mimir_tv/resolver.py), [hls.py](../service/mimir_tv/hls.py) | The LAN listener players fetch from; the HLS relay |
 | [into.py](../service/mimir_tv/into.py) | Settings → Into Jellyfin: the languages and numbers, the preview, Live TV's channel groups |
 | [mirror.py](../service/mimir_tv/mirror.py) | The whole catalogue in Jellyfin: movies and shows as `.strm` with `.nfo` tags; dubs as their own titles; the Trash for titles that left |

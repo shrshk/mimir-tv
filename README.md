@@ -151,7 +151,9 @@ are files readable by you only.
   files (a show, a movie or a live channel); ＋ My list adds it and makes it a favourite. Jellyfin's search index is
   read again at once, so every app finds it. A movie in another language (a dub) is its own title, named
   "Title · Language". Items Jellyfin has show ✓ (asked from Jellyfin's API, so something removed there shows as not
-  added). New episodes of added shows reach Jellyfin within the hour.
+  added). New episodes of added shows reach Jellyfin within the hour. A title added without a picture gets the
+  provider's picture, or else one from Jellyfin's online sources (TMDB) two minutes later; favourites without a
+  picture are looked up hourly. A show with no online id takes a picture only when exactly one show has its name.
 - **Your streaming apps**: search also finds titles on the apps you have (from TMDB, which takes JustWatch's
   data), and a title in Jellyfin or a provider shows once, with its apps. The app's button opens it: on the phone its
   link (the app opens), on the TV (or 📺 from the phone) the app itself, at its search for the title where it can.

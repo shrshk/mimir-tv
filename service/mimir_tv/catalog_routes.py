@@ -9,6 +9,7 @@ folder's url); a video by its url. Each provider has three Jellyfin libraries, n
 
 import base64
 import hashlib
+import threading
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
@@ -24,11 +25,12 @@ from mimir_tv.catalog import Catalog, CatalogError, Catalogs, Served, node_id, n
 from mimir_tv.hls import PASS, HlsError, HlsRelay, from_tailnet, is_hls, is_playlist
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
 from mimir_tv.kodi import Kodi, KodiError
-from mimir_tv.strm import add, follow, followed, play_line, safe, show_folder, write_movie, write_show
+from mimir_tv.strm import add, follow, followed, play_line, safe, show_folder, show_poster, write_movie, write_show
 from mimir_tv.jf_routes import which_tv
 from mimir_tv.tv import Tvs, TvError, aimed
 
 THUMB = "/api/thumb?u="
+POSTER_AFTER = 120  # seconds after an add: Jellyfin has read the title online by then
 
 
 def libraries(entry: dict) -> dict[str, str]:
@@ -297,9 +299,23 @@ def router(
             jf.reindex_search()
         except JellyfinError:
             pass  # search finds it after the nightly full scan instead
+        poster_later(item_id)
         if tv:
             jellyfin(lambda: jf.play_on_tv(item_id, aimed(open_app, host), play_app=aimed(play_app, host), host=host))
         return item_id
+
+    def poster_later(item_id: str) -> None:
+        """A title still without a picture once Jellyfin has read it online gets one from there (fill_poster)."""
+
+        def go():
+            try:
+                jf.fill_poster(item_id)
+            except JellyfinError as e:
+                print("poster failed:", e)
+
+        t = threading.Timer(POSTER_AFTER, go)
+        t.daemon = True
+        t.start()
 
     @api.post("/api/p/{pid}/jellyfin")
     def show_in_jellyfin(pid: str, show: Show):
@@ -312,6 +328,8 @@ def router(
         folder = show_folder(root, show.title, url, cat)  # its own name if the same show from another section is added
         files = guard(write_show, cat, pid, url, folder, root, resolver)
         follow(root, folder, url)  # new episodes are added as they appear
+        with httpx.Client(timeout=20, follow_redirects=True) as http:
+            show_poster(cat, url, root / safe(folder), http)  # its listing's picture, read on the scan below
         if show.episode and show.episode not in files:
             raise HTTPException(404, "no such episode in this show")
         ensure_library(libraries(entry)["shows"], "tvshows", root)

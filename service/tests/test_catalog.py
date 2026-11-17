@@ -31,7 +31,7 @@ from mimir_tv.mcp_server import router as mcp_router
 from mimir_tv.providers import Providers
 from mimir_tv.providers import router as providers_router
 from mimir_tv.resolver import start_resolver
-from mimir_tv.strm import add, follow, followed, refresh_shows, show_folder, write_movie, write_show
+from mimir_tv.strm import add, follow, followed, refresh_shows, show_folder, show_posters, write_movie, write_show
 from mimir_tv.vault import Vault
 from tests.test_library import FakeJellyfin
 
@@ -382,6 +382,29 @@ def test_only_caddy_on_this_machine_may_say_where_a_player_is():
     assert not from_tailnet("127.0.0.1", "192.0.2.50")  # through Caddy, at home
     assert not from_tailnet("192.0.2.50", "100.64.0.10")  # a home device cannot claim to be away
     assert not from_tailnet("127.0.0.1", "nonsense")
+
+
+def test_a_show_added_by_hand_gets_its_listings_picture(cat, tmp_path):
+    root, fetched = tmp_path / "strm", []
+
+    def images(request):
+        fetched.append(str(request.url))
+        if request.url.host == "thumbs.example":
+            return httpx.Response(200, content=b"jpg", headers={"content-type": "image/jpeg"})
+        return httpx.Response(200, text="<html>", headers={"content-type": "text/html"})
+
+    cat.pages[SHOW] = [folder("Season 2", S2, "http://thumbs.example/dark.jpg"), folder("Season 1", S1)]
+    write_show(cat, "tv1", SHOW, "Dark", root, "http://air:8724")
+    follow(root, "Dark", SHOW)
+    http = httpx.Client(transport=httpx.MockTransport(images))
+    assert show_posters(cat, root, http) == 1 and (root / "Dark/poster.jpg").read_bytes() == b"jpg"
+    assert show_posters(cat, root, http) == 0 and len(fetched) == 1  # it has one: not fetched again
+    # A page that is not a picture is not saved.
+    cat.pages[S1] = [video("Episode 1", EP.format(s=1, e=1))]
+    cat.pages[f"{SITE}/o"] = [folder("Season 1", S1, "http://pages.example/not-an-image")]
+    write_show(cat, "tv1", f"{SITE}/o", "Other", root, "http://air:8724")
+    follow(root, "Other", f"{SITE}/o")
+    assert show_posters(cat, root, http) == 0 and not (root / "Other/poster.jpg").exists()
 
 
 def test_fmp4_segments_are_relayed_as_mp4():
@@ -843,9 +866,10 @@ def test_a_dub_added_by_hand_is_its_own_film_and_the_mirror_leaves_its_folder_al
     root, air = tmp_path / "tv1-movies", "http://air:8724"
     dub = "https://files.example/movies/heat-hindi.mkv"
     plain = cat.everything
-    cat.everything = lambda: [x | {"language": "English"} if x["url"] == MOVIE else x for x in plain()] + [
-        {"kind": "movie", "url": dub, "title": "Heat (1995)", "page": SECTIONS["Movies"], "language": "Hindi"}
-    ]
+    cat.everything = lambda: (
+        [x | {"language": "English"} if x["url"] == MOVIE else x for x in plain()]
+        + [{"kind": "movie", "url": dub, "title": "Heat (1995)", "page": SECTIONS["Movies"], "language": "Hindi"}]
+    )
     # Added by hand first: the catalogue has Heat in two languages, so its name in Jellyfin says which.
     f = mirror.movie_by_hand(cat, "tv1", dub, "Heat (1995)", root, air)
     add(root, f.parent.name)

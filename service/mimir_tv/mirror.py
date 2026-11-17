@@ -33,13 +33,12 @@ import httpx
 
 from mimir_tv import badges
 from mimir_tv.catalog import Catalog, CatalogError
-from mimir_tv.strm import MIRRORED, added, follow, followed, safe, write_movie, write_show
+from mimir_tv.strm import MIRRORED, added, follow, followed, has_poster, safe, save_poster, write_movie, write_show
 
 SHOWS_PER_RUN = 100  # page reads stay polite: the first pass over ~2,000 shows takes about a day
 EPISODES_KEPT = 10  # a mirrored show's latest episodes; favourite it in Jellyfin for all of them
 REWRITE_AFTER = 7 * 24 * 3600
 POSTERS_PER_RUN = 1200  # poster downloads a run, about 20 a minute (the first pass over ~30,000 titles takes a day)
-POSTER_MAX = 3_000_000
 YEAR = re.compile(
     r"^(.*?)\s*\((\d{4})\)\s*$"
 )  # a show's episodes are read again weekly (followed shows: hourly, elsewhere)
@@ -225,7 +224,7 @@ def write_details(
     labels: list[tuple[str, str]] | None = None,
 ) -> tuple[bool, bool]:
     """The title's .nfo (rewritten only when it changes, as Jellyfin reads a changed file again) and, while the
-    run's poster budget lasts, its poster from the catalogue (http or https, an image, at most POSTER_MAX bytes),
+    run's poster budget lasts, its poster from the catalogue (strm.save_poster),
     with labels drawn on it (badges.py). Returns (nfo changed or poster drawn again, poster fetched)."""
     if not folder.is_dir():
         return False, False
@@ -233,21 +232,10 @@ def write_details(
     changed = not f.exists() or f.read_text() != text
     if changed:
         f.write_text(text)
-    poster, url, fetched = folder / "poster.jpg", item.get("thumb") or "", False
-    have = poster.exists() or (folder / badges.ORIGINAL).exists()
-    if url.startswith(("http://", "https://")) and not have and budget[0] > 0:
+    url, fetched = item.get("thumb") or "", False
+    if url.startswith(("http://", "https://")) and not has_poster(folder) and budget[0] > 0:
         budget[0] -= 1
-        try:
-            r = http.get(url)
-            if (
-                r.status_code == 200
-                and r.headers.get("content-type", "").startswith("image/")
-                and len(r.content) <= POSTER_MAX
-            ):
-                poster.write_bytes(r.content)
-                fetched = True
-        except httpx.HTTPError:
-            pass  # no poster this time; tried again next run
+        fetched = save_poster(folder, url, http)  # no poster this time: tried again next run
     if labels is not None and badges.apply(folder, labels):
         changed = True
     return changed, fetched
@@ -286,6 +274,8 @@ def movie_by_hand(cat: Catalog, pid: str, url: str, title: str, root: Path, reso
         f, text = target.parent / "movie.nfo", nfo("movie", x, several)
         if not f.exists() or f.read_text() != text:
             f.write_text(text)
+        with httpx.Client(timeout=20, follow_redirects=True) as http:
+            save_poster(target.parent, x.get("thumb") or "", http)  # the catalogue's picture, read on the scan
     return target
 
 

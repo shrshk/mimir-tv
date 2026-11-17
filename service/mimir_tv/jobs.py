@@ -16,7 +16,7 @@ from mimir_tv import grouping, mirror, onapps, settings, wholphin
 from mimir_tv.catalog import CatalogError, Catalogs, Job
 from mimir_tv.catalog_routes import libraries, roots
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
-from mimir_tv.strm import refresh_shows
+from mimir_tv.strm import refresh_shows, show_posters
 from mimir_tv.wizard import allowed
 
 NEW_EPISODES = "new-episodes"
@@ -28,6 +28,7 @@ ON_MY_APPS = "on-my-apps"
 # so a job that wrote titles has it re-read a few minutes later: Jellyfin's scan of one library gives no sign when it
 # is through, and is done well within this. One wait at a time; a re-read takes seconds.
 REINDEX_AFTER = 300  # seconds
+FAVOURITE_POSTERS = 20  # favourites without a picture looked up online a run
 REINDEX: dict = {"timer": None}
 
 
@@ -58,16 +59,24 @@ def define(jobs: Jobs) -> None:
 def new_episodes(jobs: Jobs, catalogs: Catalogs, jf: Jellyfin, media_root: Path, resolver: str) -> int:
     """New episodes of every provider's followed shows into their folders, then a scan so Jellyfin lists them."""
     with jobs.run(NEW_EPISODES) as run:
-        found = 0
+        found = pictures = 0
         for entry, cat in catalogs.all():
-            new = refresh_shows(cat, entry["id"], roots(media_root, entry["id"])["shows"], resolver)
-            if new:
+            root = roots(media_root, entry["id"])["shows"]
+            new = refresh_shows(cat, entry["id"], root, resolver)
+            posters = show_posters(cat, root)  # a show added by hand without a picture: its listing's
+            if new or posters:
                 lib = next((x for x in jf.libraries() if x["Name"] == libraries(entry)["shows"]), None)
                 if lib:
                     jf.scan(lib.get("ItemId"))
                     reindex_soon(jf)
             found += new
-        run.summary = f"{found} new episode{'s' if found != 1 else ''}"
+            pictures += posters
+        for item_id in jf.posterless_favourites()[:FAVOURITE_POSTERS]:  # then Jellyfin's online sources
+            try:
+                pictures += jf.fill_poster(item_id)
+            except JellyfinError as e:
+                print("poster failed:", e)
+        run.summary = f"{found} new episode{'s' if found != 1 else ''}" + (f", {pictures} posters" if pictures else "")
         return found
 
 

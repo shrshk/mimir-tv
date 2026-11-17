@@ -998,3 +998,61 @@ def test_live_tvs_channels_come_in_the_tuners_groups_favourites_first_with_their
     ]
     page = c.get("/api/jf/channels", params={"offset": 1, "limit": 1}).json()
     assert ([x["name"] for x in page["channels"]], page["total"]) == (["NDTV 24x7"], 3)
+
+
+class PosterJellyfin:
+    """Jellyfin's items and its online sources (TMDB) at the HTTP edge, for pictures."""
+
+    def __init__(self, items: dict, online: dict | None = None, by_name: list | None = None):
+        self.items, self.online, self.by_name = items, online or {}, by_name or []
+        self.saved: list[tuple[str, str]] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        q, p = request.url.params, request.url.path
+        if p == "/Users":
+            return httpx.Response(200, json=[{"Id": "u1", "Policy": {"IsAdministrator": True}}])
+        if p == "/Items" and q.get("Filters") == "IsFavorite":
+            return httpx.Response(200, json={"Items": [i for i in self.items.values() if i.get("fav")]})
+        if p == "/Items":
+            return httpx.Response(200, json={"Items": [self.items[q["Ids"]]] if q["Ids"] in self.items else []})
+        if p.endswith("/RemoteImages"):
+            urls = self.online.get(p.split("/")[2], [])
+            return httpx.Response(200, json={"Images": [{"Url": u} for u in urls], "TotalRecordCount": len(urls)})
+        if p.startswith("/Items/RemoteSearch/"):
+            return httpx.Response(200, json=self.by_name)
+        if p.endswith("/RemoteImages/Download"):
+            self.saved.append((p.split("/")[2], q["imageUrl"]))
+            self.items[p.split("/")[2]]["ImageTags"] = {"Primary": "t"}
+            return httpx.Response(204)
+        return httpx.Response(404)
+
+
+def test_a_title_without_a_picture_gets_one_from_jellyfins_online_sources():
+    fake = PosterJellyfin(
+        {
+            "m1": {"Id": "m1", "Type": "Movie", "Name": "Heat", "fav": True},
+            "m2": {"Id": "m2", "Type": "Movie", "Name": "Up", "ImageTags": {"Primary": "t"}, "fav": True},
+            "e1": {"Id": "e1", "Type": "Episode", "SeriesId": "s1"},
+            "s1": {"Id": "s1", "Type": "Series", "Name": "Dark"},
+        },
+        online={"m1": ["https://tmdb.example/heat.jpg"], "s1": ["https://tmdb.example/dark.jpg"]},
+    )
+    jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(fake.handler))
+    assert jf.posterless_favourites() == ["m1"]
+    assert jf.fill_poster("m1") and jf.posterless_favourites() == []
+    assert jf.fill_poster("e1")  # an episode added: its show gets the picture
+    assert not jf.fill_poster("m1")  # it has one now
+    assert fake.saved == [("m1", "https://tmdb.example/heat.jpg"), ("s1", "https://tmdb.example/dark.jpg")]
+
+
+def test_a_title_with_no_online_id_takes_a_picture_only_when_its_name_is_unique():
+    show = {"Id": "s1", "Type": "Series", "Name": "Bigg Boss (Telugu)"}
+    hit = {"Name": "Bigg Boss", "ImageUrl": "https://tmdb.example/bb.jpg"}
+    fake = PosterJellyfin(
+        {"s1": dict(show)}, by_name=[hit, {"Name": "Bigg Boss", "ImageUrl": "https://tmdb.example/x.jpg"}]
+    )
+    jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(fake.handler))
+    assert not jf.fill_poster("s1") and fake.saved == []  # two shows of that name: which one is not known
+    fake = PosterJellyfin({"s1": dict(show)}, by_name=[hit, {"Name": "Bigg Boss OTT", "ImageUrl": "https://x/o.jpg"}])
+    jf = Jellyfin("http://jf", "k", transport=httpx.MockTransport(fake.handler))
+    assert jf.fill_poster("s1") and fake.saved == [("s1", "https://tmdb.example/bb.jpg")]
