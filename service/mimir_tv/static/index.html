@@ -1056,7 +1056,7 @@ async function livePage(more) {
 // Live TV's categories: a search, then each language's (or kind's) categories with their channel counts.
 function pickGroup() {
   const v = liveView;
-  $("#dlgbody").innerHTML = `<div class="grab"></div><div class="body"><h2>Categories</h2>`
+  $("#dlgbody").innerHTML = `<div class="grab"></div><div class="body"><h2 tabindex="-1" autofocus style="outline:none">Categories</h2>`
     + `<input id="gq" type="search" placeholder="Search categories (news, telugu, cricket …)" autocomplete="off" enterkeyhint="search"><div id="glist" class="glist"></div></div>`;
   const draw = () => {
     const words = $("#gq").value.toLowerCase().split(/\s+/).filter(Boolean), by = {};
