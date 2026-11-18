@@ -207,7 +207,7 @@ class Jellyfin:
             raise JellyfinMissing("no such item")
         return items[0]
 
-    DETAIL_FIELDS = FIELDS + ",Genres,People,OfficialRating,CommunityRating"
+    DETAIL_FIELDS = FIELDS + ",Genres,People,OfficialRating,CommunityRating,ProviderIds"
 
     def details(self, item_id: str) -> dict:
         """One title with what its page shows: genres, cast and crew, ratings, and where it was left."""

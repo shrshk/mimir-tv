@@ -412,6 +412,7 @@ def main() -> None:
             phone_app=lambda: settings.load(config)["phone_app"],
             tvs=tvs,
             live_roots=lambda: [str(roots(media_root, entry["id"])["live"]) for entry, _ in catalogs.all()],
+            runtime=lambda tmdb_id: streaming.runtime(tmdb_id),  # made below; asked only when a page opens
         )
     ]
     # Where titles stream, filtered to the house's apps: TMDB, with its API Read Access Token (from your password manager) in

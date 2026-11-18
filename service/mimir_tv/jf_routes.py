@@ -239,10 +239,12 @@ def router(
     tvs: Tvs | None = None,
     live_roots: Callable[[], list[str]] = list,
     fetch: Callable[[str], str] | None = None,
+    runtime: Callable[[str], int] = lambda tmdb_id: 0,
 ) -> APIRouter:
     """hidden: the providers' own libraries, shown in each provider's section instead of Your library. tvs: the TVs
     in Settings, so a play can name one (open_app and play_app then take its address as tv=). live_roots: the
-    folders of the providers' live channels (their .strm files), whose channels go on My list's own playlist."""
+    folders of the providers' live channels (their .strm files), whose channels go on My list's own playlist.
+    runtime: a movie's minutes by its TMDB id, for a page Jellyfin has none for (a .strm title it has not played)."""
     api = APIRouter()
 
     def guard(fn, *args):
@@ -443,7 +445,11 @@ def router(
         people = i.get("People") or []
         return card(i) | {
             "year": i.get("ProductionYear") or "",
-            "minutes": round(i["RunTimeTicks"] / 6e8) if i.get("RunTimeTicks") else 0,
+            "minutes": round(i["RunTimeTicks"] / 6e8)
+            if i.get("RunTimeTicks")
+            else runtime((i.get("ProviderIds") or {}).get("Tmdb") or "")
+            if i.get("Type") == "Movie"
+            else 0,
             "rating": i.get("OfficialRating") or "",
             "score": round(i["CommunityRating"], 1) if i.get("CommunityRating") else "",
             "genres": i.get("Genres") or [],

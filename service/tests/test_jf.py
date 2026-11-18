@@ -11,6 +11,7 @@ from mimir_tv.jf_routes import router
 from mimir_tv.kodi import Kodi
 from mimir_tv.mylist import ListDates
 from mimir_tv.resolver import start_resolver
+from mimir_tv.streaming import Streaming
 from mimir_tv.tv import Tvs
 
 MOVIE = "a" * 32
@@ -735,6 +736,27 @@ def test_a_movie_page_has_its_details_and_the_librarys_titles_like_it(tmp_path):
     assert other["more"] == [] and other["backdrop"] == "" and other["cast"] == ["Prabhas"]
     assert c.get("/api/jf/title", params={"id": "../Users"}).status_code == 422
     assert c.get("/api/jf/title", params={"id": "6" * 32}).status_code in (404, 502)
+
+
+def test_a_movie_jellyfin_has_not_played_gets_its_length_from_tmdb(tmp_path, monkeypatch):
+    # A .strm title: Jellyfin reads a length only by playing it, and takes none from TMDB or the .nfo.
+    strm = "6" * 32
+    monkeypatch.setitem(ITEMS, strm, item(strm, "Inception", "Movie", RunTimeTicks=None, ProviderIds={"Tmdb": "27205"}))
+    asked = []
+
+    def tmdb(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.path)
+        return httpx.Response(200, json={"id": 27205, "runtime": 148})
+
+    jf = Jellyfin("http://jf", "secret-key", transport=httpx.MockTransport(fake))
+    streaming = Streaming("eyJtok", tmp_path / "m.db", transport=httpx.MockTransport(tmdb))
+    c = TestClient(
+        create_app(jf, tmp_path / "picks", router(jf, None, "https://lan.example", runtime=streaming.runtime))
+    )
+    assert c.get("/api/jf/title", params={"id": strm}).json()["minutes"] == 148
+    assert c.get("/api/jf/title", params={"id": FILM}).json()["minutes"] == 60  # Jellyfin's own length comes first
+    c.get("/api/jf/title", params={"id": strm})
+    assert asked == ["/3/movie/27205"]  # once: TMDB's answer is kept
 
 
 def test_whats_playing_on_the_tv_includes_wholphin_which_takes_no_remote_control_while_it_plays(tmp_path, monkeypatch):

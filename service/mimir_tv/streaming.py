@@ -180,6 +180,15 @@ class Streaming:
             self.db.execute("INSERT OR REPLACE INTO tmdb VALUES (?, ?, ?)", (k, time.time(), r.text))
         return r.json()
 
+    def runtime(self, tmdb_id: str) -> int:
+        """A movie's length in minutes from TMDB (0 when unknown): Jellyfin learns a .strm title's only by playing it."""
+        if not self.ready or not tmdb_id.isdigit():
+            return 0
+        try:
+            return int(self._get(f"/movie/{tmdb_id}").get("runtime") or 0)
+        except StreamingError:
+            return 0
+
     def title_link(self, app: App, tmdb: str, title: str) -> str:
         """The app's own link for the title ("tv/96677" in TMDB's terms), or "" when JustWatch has none."""
         kind, _, tid = tmdb.partition("/")
