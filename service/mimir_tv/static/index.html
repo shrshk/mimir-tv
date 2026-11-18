@@ -1029,8 +1029,8 @@ async function livePage(more) {
   const typing = document.activeElement && document.activeElement.id === "lq";
   const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
   // A search of the channels by name and category ("star sports", "telugu news"), with a category or ♥ too.
-  let html = `<input id="lq" type="search" placeholder="Search channels (star sports, telugu news …)" autocomplete="off" enterkeyhint="search" value="${esc(v.q)}" style="margin:4px 0 10px">`
-    + `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
+  let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}`
+    + `<input id="lq" type="search" placeholder="Search channels" autocomplete="off" enterkeyhint="search" value="${esc(v.q)}" style="flex:1 1 160px;min-width:140px;padding:6px 12px;border-radius:999px"></div>`
     // The provider's categories (60 and more) in a sheet with a search, not a line of chips: the pick shows here.
     // The picked category first, with ✕ (back to all); Categories ▾ stays, to search again.
     + `<div class="chips line">${v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group="" aria-label="Clear category"') : chip(!v.fav, "All", 'data-group=""')}`
