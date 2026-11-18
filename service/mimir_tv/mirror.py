@@ -14,7 +14,8 @@ Each title also gets Jellyfin's own metadata files from what the catalogue says 
 movie.nfo or tvshow.nfo (plot, its language and kind as genres, a TV channel as studio, year) and poster.jpg, so
 Jellyfin apps can list titles by language or channel even where online metadata finds nothing.
 
-What was written is kept in .mirrored.json in each root ({link: {"name", "at"}}).
+What was written is kept in .mirrored.json in each root ({link: {"name", "at"}}). Links in a root's .removed.json
+(a wrong copy taken out of Jellyfin) are never written again.
 
 A house can keep it to some languages and the newest few titles of each category (settings library_languages and
 mirror_per_category; wanted): a title outside them is not written, and one written before goes to the Trash (prune),
@@ -33,7 +34,18 @@ import httpx
 
 from mimir_tv import badges
 from mimir_tv.catalog import Catalog, CatalogError
-from mimir_tv.strm import MIRRORED, added, follow, followed, has_poster, safe, save_poster, write_movie, write_show
+from mimir_tv.strm import (
+    MIRRORED,
+    added,
+    follow,
+    followed,
+    has_poster,
+    removed,
+    safe,
+    save_poster,
+    write_movie,
+    write_show,
+)
 
 SHOWS_PER_RUN = 100  # page reads stay polite: the first pass over ~2,000 shows takes about a day
 EPISODES_KEPT = 10  # a mirrored show's latest episodes; favourite it in Jellyfin for all of them
@@ -98,7 +110,8 @@ def mirror(
     """One run: every wanted movie not written yet, then up to per_run wanted shows, then details for every written
     title (a batch of posters a run). Returns counts of what was written."""
     now = time.time() if now is None else now
-    everything = cat.everything()
+    skip = removed(movies_root) | removed(shows_root)
+    everything = [x for x in cat.everything() if x["url"] not in skip]
     listed = wanted(everything, languages or [], per_category, movies_per_category)
     out = {"movies": 0, "shows": 0, "episodes": 0, "failed": 0, "details": 0, "posters": 0}
 

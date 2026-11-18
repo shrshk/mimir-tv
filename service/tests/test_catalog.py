@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import time
 from urllib.parse import unquote, parse_qs, quote, urlsplit
 
@@ -860,6 +861,18 @@ def test_into_jellyfin_previews_without_moving_anything_then_saves_the_houses_ch
         False,
     )
     assert cfg["mirror_movies_per_category"] == 0 and c.get("/api/settings/into").json()["movies_per_category"] == 0
+
+
+def test_a_removed_copy_is_not_written_again(cat, tmp_path):
+    root, air = tmp_path / "tv1-movies", "http://air:8724"
+    mirror.mirror(cat, "tv1", tmp_path / "tv1", root, air)
+    name = mirror.mirrored(root)[MOVIE]["name"]
+    assert (root / name).is_dir()
+    # Taken out by hand (a wrong film under a famous title): its folder goes, its link is listed as removed.
+    shutil.rmtree(root / name)
+    (root / ".removed.json").write_text(json.dumps([MOVIE]))
+    mirror.mirror(cat, "tv1", tmp_path / "tv1", root, air)
+    assert not (root / name).exists()
 
 
 def test_a_dub_added_by_hand_is_its_own_film_and_the_mirror_leaves_its_folder_alone(cat, tmp_path):

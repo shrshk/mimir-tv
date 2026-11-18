@@ -17,6 +17,7 @@ from mimir_tv.catalog import Catalog, CatalogError
 FOLLOWED = ".followed.json"  # shows added to Jellyfin (title: the show's page), checked for new episodes
 MIRRORED = ".mirrored.json"  # what the whole catalogue wrote (mirror.py): {link: {"name": its folder, "at"}}
 ADDED = ".added.json"  # movies added to Jellyfin by hand (folder names): the mirror's limit never removes them
+REMOVED = ".removed.json"  # links the mirror never writes again (a wrong copy, taken out of Jellyfin)
 LIST_FOR = 6 * 3600  # how old a show's listing may be when it is written
 POSTER = "poster.jpg"  # a title's picture, next to its files: Jellyfin reads it on its next scan
 POSTER_MAX = 3_000_000
@@ -147,6 +148,11 @@ def show_folder(root: Path, title: str, show_url: str, cat: Catalog) -> str:
 def added(root: Path) -> list[str]:
     f = root / ADDED
     return json.loads(f.read_text()) if f.exists() else []
+
+
+def removed(root: Path) -> set[str]:
+    f = root / REMOVED
+    return set(json.loads(f.read_text())) if f.exists() else set()
 
 
 def add(root: Path, name: str) -> None:

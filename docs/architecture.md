@@ -130,7 +130,8 @@ flowchart LR
 
 One ordered list of languages (`library_languages`) drives every step. A title the house watched, favourited or
 added by hand is never sent to the Trash. A movie in another language is its own title ("Title · Language"), and a
-hand-added one keeps its folder when the mirror runs.
+hand-added one keeps its folder when the mirror runs. A link in a library's `.removed.json` (a wrong copy taken out of
+Jellyfin) is never written again.
 
 ### A title on a streaming app
 
