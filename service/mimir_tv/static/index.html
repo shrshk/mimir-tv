@@ -218,6 +218,8 @@
   .chr .nm { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chr .now { font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .chr .nx { font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .chr .hit { color:var(--accent); } .chr div.hit:not(.now) { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .gd .pb.hit { outline:2px solid var(--accent); outline-offset:-2px; }
   .chr .pg { height:3px; background:#ffffff1a; border-radius:2px; margin:4px 0 3px; } .chr .pg i { display:block; height:100%; background:var(--accent); border-radius:2px; }
   .gd { grid-column:1/-1; overflow-x:auto; margin:0 -16px; padding:0 16px; scrollbar-width:none; } .gd::-webkit-scrollbar { display:none; }
   @media (min-width:700px) { .gd { margin:0 -32px; padding:0 32px; } }
@@ -1009,7 +1011,7 @@ async function personPage(id) {
 // Live TV, as Streamyfin and Wholphin show it (favourites first, every channel, the guide), in the provider's groups
 // (Jellyfin keeps none: the Air reads them from the tuner's playlist). Channels: logo, now with progress, next.
 // Guide: channels down, the next three hours across. A channel or a programme opens the channel's card (▶, 📺, ♥).
-let liveView = {view: "channels", group: "", fav: false, q: "", items: [], total: 0, groups: []}, liveTimer;
+let liveView = {view: "channels", picked: [], fav: false, q: "", only: "", items: [], total: 0, groups: [], found: null}, liveTimer;
 const PX = 4;  // the guide: pixels a minute
 async function livePage(more) {
   crumbs = [{title: "Live TV", node: "__live"}]; renderTrail();
@@ -1017,33 +1019,46 @@ async function livePage(more) {
   const v = liveView;
   if (!more) v.items = [];
   const q = new URLSearchParams({offset: v.items.length, limit: 40, hours: 3});
-  if (v.group) q.set("group", v.group);
+  v.picked.forEach(g => q.append("group", g));
   if (v.fav) q.set("fav", "true");
-  if (v.q.trim()) q.set("q", v.q.trim());
-  const asked = v.q;
-  const got = await api("/api/jf/channels?" + q).catch(e => { toast(e.message); return {channels: [], groups: [], total: 0}; });
-  if (asked !== v.q) return;  // typed on since: that search draws the page
-  v.items = v.items.concat(got.channels); v.total = got.total; if (got.groups.length) v.groups = got.groups;
+  if (v.q.trim()) { q.set("q", v.q.trim()); if (v.only) q.set("only", v.only); }
+  const asked = v.q + "\n" + v.only;
+  const got = await api("/api/jf/channels?" + q).catch(e => { toast(e.message); return {channels: [], groups: [], total: 0, found: null}; });
+  if (asked !== v.q + "\n" + v.only) return;  // typed on since: that search draws the page
+  v.items = v.items.concat(got.channels); v.total = got.total; v.found = got.found; if (got.groups.length) v.groups = got.groups;
   pool = [];
   current = {node: "__live", title: "Live TV", items: [], videos: []};
   const typing = document.activeElement && document.activeElement.id === "lq";
   const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
-  // A search of the channels by name and category ("star sports", "telugu news"), with a category or ♥ too.
-  let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}`
-    + `<input id="lq" type="search" placeholder="Search channels" autocomplete="off" enterkeyhint="search" value="${esc(v.q)}" style="flex:1 1 160px;min-width:140px;padding:6px 12px;border-radius:999px"></div>`
-    // The provider's categories (60 and more) in a sheet with a search, not a line of chips: the pick shows here.
-    // The picked category first, with ✕ (back to all); Categories ▾ stays, to search again.
-    + `<div class="chips line">${v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group="" aria-label="Clear category"') : chip(!v.fav, "All", 'data-group=""')}`
-    + `${chip(v.fav, "♥ Favourites", "data-fav")}${chip(false, "Categories ▾", "data-pick")}</div>`;
-  const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
+  const short = g => g.split(" · ").slice(-1)[0];
+  // 1. How to see them: a list, or the guide.
+  let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
+    // 2. Which channels: all, the favourites, or the categories picked (any of them; ✕ takes one off). The
+    // provider's categories (60 and more) are picked in a sheet with its own search.
+    + `<div class="chips line">${chip(!v.fav && !v.picked.length, "All", "data-all")}${chip(v.fav, "♥ Favourites", "data-fav")}`
+    + v.picked.map(g => chip(true, `${esc(g)} ✕`, `data-unpick="${esc(g)}" aria-label="Remove ${esc(g)}"`)).join("")
+    + `${chip(false, v.picked.length ? "+ Category" : "Categories ▾", "data-pick")}</div>`;
+  // 3. A search within them, as the main search: channels by name or category, then channels showing a programme
+  // of that name now or later today. 4. Its filter line: all, On TV, each category with its count.
+  const where = v.picked.length === 1 ? short(v.picked[0]) : v.picked.length ? `${v.picked.length} categories` : v.fav ? "favourites" : "";
+  html += `<input id="lq" type="search" placeholder="${where ? `Search ${esc(where)}` : "Search channels and what's on"}" autocomplete="off" enterkeyhint="search" value="${esc(v.q)}" style="grid-column:1/-1;margin:2px 0 6px">`;
+  const f = v.found;
+  if (f && f.all) {
+    html += `<div class="chips line">${chip(!v.only, `All<small>${f.all}</small>`, 'data-only=""')}`
+      + (f.tv ? chip(v.only === "On TV", `On TV<small>${f.tv}</small>`, 'data-only="On TV"') : "")
+      + (f.groups.length > 1 || v.only ? f.groups.map(g => chip(v.only === g.name, `${esc(g.name)}<small>${g.count}</small>`, `data-only="${esc(g.name)}"`)).join("") : "")
+      + `</div>`;
+  }
+  const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.match ? c.match.title : c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
   const hm = t => new Date(t).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
   const logo = c => `<div class="lg"${c.thumb ? ` style="background-image:url('${c.thumb}')"` : ""}>${c.thumb ? "" : esc(c.name)}${c.fav ? `<span class="h">♥</span>` : ""}</div>`;
-  if (!v.items.length) html += `<div class="full mute" style="margin-top:8px">${v.q.trim() ? `No channel matches “${esc(v.q.trim())}”.` : v.fav ? "No favourite channels yet: ♥ a channel to keep it first." : "No channels here."}</div>`;
+  if (!v.items.length) html += `<div class="full mute" style="margin-top:8px">${v.q.trim() ? `Nothing matches “${esc(v.q.trim())}”${where ? ` in ${esc(where)}` : ""}.` : v.fav ? "No favourite channels yet: ♥ a channel to keep it first." : "No channels here."}</div>`;
   else if (v.view === "channels") {
     html += `<div class="chl">${v.items.map((c, k) => {
-      const now = c.programmes.find(p => p.on_now), next = c.programmes.find(p => !p.on_now);
-      return `<div class="chr" data-ch="${k}">${logo(c)}<div class="grow"><div class="nm">${esc([c.number, c.name].filter(Boolean).join("  "))}</div>`
-        + (now ? `<div class="now">${esc(now.title)}</div><div class="pg"><i style="width:${now.progress}%"></i></div>` : `<div class="now" style="color:var(--dim);font-weight:400">No guide</div>`)
+      const now = c.programmes.find(p => p.on_now), next = c.programmes.find(p => !p.on_now), m = c.match;
+      return `<div class="chr" data-ch="${k}">${logo(c)}<div class="grow"><div class="nm">${esc([c.number, c.name].filter(Boolean).join("  "))}${v.q.trim() && c.group ? ` · ${esc(c.group)}` : ""}</div>`
+        + (m && !m.on_now ? `<div class="hit">${hm(m.start)} · ${esc(m.title)}</div>` : "")
+        + (now ? `<div class="now${m && m.on_now ? " hit" : ""}">${esc(now.title)}</div><div class="pg"><i style="width:${now.progress}%"></i></div>` : `<div class="now" style="color:var(--dim);font-weight:400">No guide</div>`)
         + (next ? `<div class="nx">Next ${hm(next.start)} · ${esc(next.title)}</div>` : "") + `</div></div>`;
     }).join("")}</div>`;
   } else {
@@ -1054,26 +1069,31 @@ async function livePage(more) {
     html += `<div class="gd"><div class="times" style="width:${76 + width}px">${times}</div>`
       + v.items.map((c, k) => `<div class="gr"><div class="cell" data-ch="${k}">${logo(c)}</div><div class="track" style="width:${width}px">`
         + `<div class="nowline" style="left:${(Date.now() - t0) / 60000 * PX}px"></div>`
-        + c.programmes.map(p => { const l = x(p.start), w = x(p.end) - l; return w < 6 ? "" : `<div class="pb${p.on_now ? " on" : ""}" data-ch="${k}" style="left:${l}px;width:${w}px" title="${esc(p.title)}">${esc(p.title)}</div>`; }).join("")
+        + c.programmes.map(p => { const l = x(p.start), w = x(p.end) - l, hit = c.match && c.match.start === p.start; return w < 6 ? "" : `<div class="pb${p.on_now ? " on" : ""}${hit ? " hit" : ""}" data-ch="${k}" style="left:${l}px;width:${w}px" title="${esc(p.title)}">${esc(p.title)}</div>`; }).join("")
         + `</div></div>`).join("") + `</div>`;
   }
   if (v.items.length < v.total) html += `<div class="full" style="text-align:center;margin:14px 0"><button data-more>More channels (${v.total - v.items.length} more)</button></div>`;
   $("#grid").innerHTML = html;
+  const again = () => { v.only = ""; livePage(); };
   $("#grid").querySelectorAll("[data-view]").forEach(b => b.onclick = () => { v.view = b.dataset.view; livePage(); });
-  $("#grid").querySelectorAll("[data-group]").forEach(b => b.onclick = () => { v.group = b.dataset.group; v.fav = false; livePage(); });
-  $("#grid").querySelectorAll("[data-fav]").forEach(b => b.onclick = () => { v.fav = !v.fav; v.group = ""; livePage(); });
+  $("#grid").querySelectorAll("[data-all]").forEach(b => b.onclick = () => { v.picked = []; v.fav = false; again(); });
+  $("#grid").querySelectorAll("[data-fav]").forEach(b => b.onclick = () => { v.fav = !v.fav; v.picked = []; again(); });
+  $("#grid").querySelectorAll("[data-unpick]").forEach(b => b.onclick = () => { v.picked = v.picked.filter(g => g !== b.dataset.unpick); again(); });
+  $("#grid").querySelectorAll("[data-only]").forEach(b => b.onclick = () => { v.only = b.dataset.only; livePage(); });
   $("#grid").querySelectorAll("[data-ch]").forEach(d => d.onclick = () => videoSheet(cardOf(v.items[+d.dataset.ch])));
   const moreBtn = $("#grid [data-more]"); if (moreBtn) moreBtn.onclick = () => livePage(true);
   $("#grid").querySelectorAll("[data-pick]").forEach(b => b.onclick = pickGroup);
   const lq = $("#lq");
-  lq.oninput = () => { v.q = lq.value; clearTimeout(liveTimer); liveTimer = setTimeout(() => livePage(), 250); };
+  lq.oninput = () => { v.q = lq.value; v.only = ""; clearTimeout(liveTimer); liveTimer = setTimeout(() => livePage(), 250); };
   if (typing) { lq.focus({preventScroll: true}); lq.setSelectionRange(lq.value.length, lq.value.length); }
 }
-// Live TV's categories: a search, then each language's (or kind's) categories with their channel counts.
+// Live TV's categories: a search, then each language's (or kind's) categories with their channel counts. A tap
+// picks or unpicks one (several can be picked); Done, or closing the sheet, shows their channels.
 function pickGroup() {
-  const v = liveView;
-  $("#dlgbody").innerHTML = `<div class="grab"></div><div class="body"><h2 tabindex="-1" autofocus style="outline:none">Categories</h2>`
-    + `<input id="gq" type="search" placeholder="Search categories (news, telugu, cricket …)" autocomplete="off" enterkeyhint="search"><div id="glist" class="glist"></div></div>`;
+  const v = liveView, was = v.picked.join("\n");
+  $("#dlgbody").innerHTML = `<div class="grab"></div><div class="body"><div class="row" style="justify-content:space-between;align-items:center"><h2 tabindex="-1" autofocus style="outline:none;margin:0">Categories</h2>`
+    + `<span class="row" style="gap:8px"><button class="alt" data-clear>Clear</button><button data-done>Done</button></span></div>`
+    + `<input id="gq" type="search" placeholder="Search categories (news, telugu, cricket …)" autocomplete="off" enterkeyhint="search" style="margin-top:10px"><div id="glist" class="glist"></div></div>`;
   const draw = () => {
     const words = $("#gq").value.toLowerCase().split(/\s+/).filter(Boolean), by = {};
     for (const g of v.groups.filter(g => words.every(w => g.name.toLowerCase().includes(w)))) {
@@ -1081,10 +1101,19 @@ function pickGroup() {
       (by[top] = by[top] || []).push({...g, label: rest.join(" · ") || top});
     }
     $("#glist").innerHTML = Object.entries(by).map(([top, gs]) => `<div class="gh">${esc(top)}</div>`
-      + gs.map(g => `<button class="gi${g.name === v.group ? " on" : ""}" data-g="${esc(g.name)}"><span>${esc(g.label)}</span><small>${g.count}</small></button>`).join("")).join("")
+      + gs.map(g => `<button class="gi${v.picked.includes(g.name) ? " on" : ""}" data-g="${esc(g.name)}"><span>${v.picked.includes(g.name) ? "✓ " : ""}${esc(g.label)}</span><small>${g.count}</small></button>`).join("")).join("")
       || `<div class="mute" style="padding:12px 0">No category matches.</div>`;
-    $("#glist").querySelectorAll("[data-g]").forEach(b => b.onclick = () => { v.group = b.dataset.g; v.fav = false; $("#dlg").close(); livePage(); });
+    $("#glist").querySelectorAll("[data-g]").forEach(b => b.onclick = () => {
+      const g = b.dataset.g;
+      v.picked = v.picked.includes(g) ? v.picked.filter(x => x !== g) : [...v.picked, g];
+      if (v.picked.length) v.fav = false;
+      draw();
+    });
+    $("#dlgbody [data-done]").textContent = v.picked.length ? `Done (${v.picked.length})` : "Done";
   };
+  $("#dlgbody [data-clear]").onclick = () => { v.picked = []; draw(); };
+  $("#dlgbody [data-done]").onclick = () => $("#dlg").close();
+  $("#dlg").addEventListener("close", () => { if (v.picked.join("\n") !== was) { v.only = ""; livePage(); } }, {once: true});
   $("#gq").oninput = draw; draw();
   $("#dlg").classList.add("sheet"); $("#dlg").showModal();
   $("#gq").blur();  // a sheet focuses its first field: the keyboard waits for a tap on the search box

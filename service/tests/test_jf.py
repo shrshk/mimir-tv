@@ -1023,13 +1023,32 @@ def test_live_tvs_channels_come_in_the_tuners_groups_favourites_first_with_their
     page = c.get("/api/jf/channels", params={"offset": 1, "limit": 1}).json()
     assert ([x["name"] for x in page["channels"]], page["total"]) == (["NDTV 24x7"], 3)
 
-    # A search by name and group: every word, spaces aside ("starsports"), with a group or the favourites too.
+    # Several groups at once (any of them).
+    both = c.get("/api/jf/channels", params={"group": ["Hindi · News", "Sports · Cricket"]}).json()
+    assert [x["name"] for x in both["channels"]] == ["STAR SPORTS 1", "AAJ TAK"] and both["found"] is None
+
+    # A search, as the main one: by name or group, every word, spaces aside, a long word one letter off; then a
+    # channel showing a programme of that name, which it says. Only within the groups picked, or the favourites.
     def found(**params):
         return [x["name"] for x in c.get("/api/jf/channels", params=params).json()["channels"]]
 
-    assert found(q="star sports") == found(q="StarSports") == found(q="cricket") == ["STAR SPORTS 1"]
+    assert found(q="star sports") == found(q="StarSports") == found(q="crickt") == ["STAR SPORTS 1"]
     assert found(q="news") == ["NDTV 24x7", "AAJ TAK"] and found(q="hindi news") == ["AAJ TAK"]
     assert found(q="news", fav="true") == [] and found(q="aaj", group="English · News") == []
+    on = c.get("/api/jf/channels", params={"q": "bulletin"}).json()
+    assert [(x["name"], x["match"]["title"], x["match"]["on_now"]) for x in on["channels"]] == [
+        ("AAJ TAK", "Bulletin", True)
+    ]
+    assert on["found"] == {"all": 1, "tv": 1, "groups": [{"name": "Hindi · News", "count": 1}]}
+    assert found(q="bulletin", group="Sports · Cricket") == []
+    # The filter line under the search: its counts, and one of them picked.
+    news = c.get("/api/jf/channels", params={"q": "news"}).json()["found"]
+    assert news == {
+        "all": 2,
+        "tv": 1,  # AAJ TAK has Late News later
+        "groups": [{"name": "English · News", "count": 1}, {"name": "Hindi · News", "count": 1}],
+    }
+    assert found(q="news", only="English · News") == ["NDTV 24x7"] and found(q="news", only="On TV") == ["AAJ TAK"]
 
 
 class PosterJellyfin:

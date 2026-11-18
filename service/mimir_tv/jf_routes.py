@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import unicodedata
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 import httpx
 from fastapi import APIRouter, HTTPException, Path, Query, Request
@@ -309,16 +309,22 @@ def router(
 
     @api.get("/api/jf/channels")
     def channels(
-        group: str = Query("", max_length=200),
+        group: Annotated[list[str] | None, Query()] = None,
         fav: bool = False,
         offset: int = Query(0, ge=0),
         limit: int = Query(40, ge=1, le=200),
         hours: int = Query(3, ge=1, le=12),
         q: str = Query("", max_length=100),
+        only: str = Query("", max_length=200),
     ):
         """Live TV as Jellyfin's apps list it (favourites first, then by number), in its tuner's groups, a page at a
-        time; each channel with its guide for the next hours (the Channels and the Guide views). q: channels whose
-        name and group have every word ("star sports", "telugu news"), spaces and dots aside."""
+        time; each channel with its guide for the next hours (the Channels and the Guide views). group: the picked
+        groups (any of them); fav: the favourites only.
+
+        q searches what those leave, as the main search does (every word, a short one as a word's start, a long one
+        one letter off): a channel by its name or group ("star sports", "telugu news"), then one with a programme
+        of that name on now or later today ("arsenal"), its match said. found: the hits' counts for the filter line,
+        by group and "On TV" (those found by a programme); only: one of them."""
         groups = tuner_groups()
         listed = channel_list()
         counts: dict[str, int] = {}
@@ -327,20 +333,51 @@ def router(
             if g:
                 counts[g] = counts.get(g, 0) + 1
         order = list(dict.fromkeys(groups.values()))
-        words = [re.sub(r"[^a-z0-9]", "", w) for w in q.lower().split()]
+        picked = set(filter(None, group or []))
 
-        def has_words(c: dict) -> bool:
-            name = c.get("Name", "").strip()
-            text = re.sub(r"[^a-z0-9]", "", f"{name} {groups.get(name, '')}".lower())
-            return all(w in text for w in words)
+        def group_of(c: dict) -> str:
+            return groups.get(c.get("Name", "").strip(), "")
 
-        wanted = [
+        scope = [
             c
             for c in listed
-            if (not group or groups.get(c.get("Name", "").strip()) == group)
-            and (not fav or (c.get("UserData") or {}).get("IsFavorite"))
-            and has_words(c)
+            if (not picked or group_of(c) in picked) and (not fav or (c.get("UserData") or {}).get("IsFavorite"))
         ]
+        matches: dict[str, dict] = {}  # channel id -> the programme the search found on it
+        found = None
+        if any(len(w) > 1 for w in words(q)):
+            by_name = [c for c in scope if named(q, {"Name": c.get("Name", ""), "OriginalTitle": group_of(c)})]
+            by_name.sort(key=lambda c: closeness(c.get("Name", ""), q))  # stable: favourites, then by number
+            in_scope = {c["Id"]: c for c in scope}
+            named_ids = {c["Id"] for c in by_name}
+            airing = []
+            try:
+                shows_found = [x for x in jf.programmes(q, hours=12) if x.get("ChannelId") and named(q, x)]
+            except JellyfinError:
+                shows_found = []
+            for x in sorted((programme(x) for x in shows_found), key=lambda x: (not x["on_now"], x["start"])):
+                cid = x["id"]
+                if cid in in_scope and cid not in matches:
+                    matches[cid] = x
+                    if cid not in named_ids:
+                        airing.append(in_scope[cid])
+            hits = by_name + airing
+            by_group: dict[str, int] = {}
+            for c in hits:
+                if group_of(c):
+                    by_group[group_of(c)] = by_group.get(group_of(c), 0) + 1
+            found = {
+                "all": len(hits),
+                "tv": sum(1 for c in hits if c["Id"] in matches),
+                "groups": [{"name": g, "count": by_group[g]} for g in order if by_group.get(g)],
+            }
+            if only == "On TV":
+                hits = [c for c in hits if c["Id"] in matches]
+            elif only:
+                hits = [c for c in hits if group_of(c) == only]
+            wanted = hits
+        else:
+            wanted = scope
         page = wanted[offset : offset + limit]
         now = time.time()
         shows: dict[str, list[dict]] = {}
@@ -352,6 +389,7 @@ def router(
         return {
             "groups": [{"name": g, "count": counts[g]} for g in order if counts.get(g)],
             "total": len(wanted),
+            "found": found,
             "channels": [
                 {
                     "id": c["Id"],
@@ -359,8 +397,9 @@ def router(
                     "number": c.get("ChannelNumber") or "",
                     "thumb": card(c)["thumb"],
                     "fav": bool((c.get("UserData") or {}).get("IsFavorite")),
-                    "group": groups.get(c.get("Name", "").strip(), ""),
+                    "group": group_of(c),
                     "programmes": [{k: p[k] for k in keep} for p in shows.get(c["Id"], [])],
+                    "match": {k: matches[c["Id"]][k] for k in keep} if c["Id"] in matches else None,
                 }
                 for c in page
             ],
