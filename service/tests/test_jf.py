@@ -551,6 +551,27 @@ def test_home_rows_continue_watching_next_up_and_new_episodes(tmp_path, monkeypa
                 "IndexNumber": 7,
                 "DateCreated": "2099-01-01T00:00:00",
             },
+            ep
+            | {"Id": "e8", "Name": "Episode 8", "ParentIndexNumber": 1, "IndexNumber": 8, "DateCreated": "2099-01-03"},
+            ep
+            | {
+                "Id": "e9",
+                "Name": "Episode 9",
+                "ParentIndexNumber": 1,
+                "IndexNumber": 9,
+                "DateCreated": "2099-01-04",
+                "UserData": {"Played": True},
+            },
+            {
+                "Type": "Episode",
+                "SeriesName": "Bigg Boss",
+                "SeriesId": "s2",
+                "Id": "b1",
+                "Name": "Day 1",
+                "ParentIndexNumber": 9,
+                "IndexNumber": 1,
+                "DateCreated": "2099-01-02",
+            },
             # A show nobody here watches (the whole catalogue adds many): not under New episodes.
             {
                 "Type": "Episode",
@@ -569,6 +590,7 @@ def test_home_rows_continue_watching_next_up_and_new_episodes(tmp_path, monkeypa
         ],
     )
     monkeypatch.setitem(ITEMS, "s1", item("s1", "The Traitors (Telugu)", "Series"))
+    monkeypatch.setitem(ITEMS, "s2", item("s2", "Bigg Boss", "Series"))
     _, c, _ = setup(tmp_path)
     rows = c.get("/api/jf/home").json()
     assert [(i["title"], i["progress"]) for i in rows["resume"]] == [("Wedding Film 4K", 25)]
@@ -577,8 +599,11 @@ def test_home_rows_continue_watching_next_up_and_new_episodes(tmp_path, monkeypa
     # Watched but not on My list (or taken off it): its new episodes stay out; Next up still has it.
     assert rows["new"] == []
     USER_DATA["s1"] = {"IsFavorite": True}
+    USER_DATA["s2"] = {"IsFavorite": True}
     rows = c.get("/api/jf/home").json()
-    assert [i["title"] for i in rows["new"]] == ["Episode 7"]
+    # One card a show, the one with the newest episode first: its first unwatched new episode, and how many there
+    # are (Episode 9 is watched); a show with one new episode needs no count.
+    assert [(i["title"], i.get("new")) for i in rows["new"]] == [("Episode 7", 2), ("Day 1", None)]
     new = rows["new"][0]
     assert (new["sub"], new["thumb"]) == (
         "The Traitors (Telugu) · S01E07",

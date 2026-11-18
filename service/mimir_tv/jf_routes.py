@@ -533,7 +533,27 @@ def router(
             except JellyfinError:
                 return []
 
-        return {"resume": rows(jf.resume), "next_up": rows(jf.next_up), "new": rows(jf.recent_episodes, 7)}
+        return {"resume": rows(jf.resume), "next_up": rows(jf.next_up), "new": new_by_show()}
+
+    def new_by_show() -> list[dict]:
+        """New episodes, one card a show (a show adding a season at once would fill the row): its first unwatched
+        new episode, which plays them in order, with how many there are; the show with the newest first. A show
+        whose new episodes are all watched is left out."""
+        try:
+            found = jf.recent_episodes(7)
+        except JellyfinError:
+            return []
+        shows: dict[str, list[dict]] = {}  # newest first, as found
+        for e in found:
+            shows.setdefault(e.get("SeriesId") or e["Id"], []).append(e)
+        out = []
+        for eps in shows.values():
+            left = [e for e in eps if not (e.get("UserData") or {}).get("Played")]
+            if not left:
+                continue
+            first = min(left, key=lambda e: (e.get("ParentIndexNumber") or 0, e.get("IndexNumber") or 0))
+            out.append(card(first) | ({"new": len(left)} if len(left) > 1 else {}))
+        return out
 
     @api.get("/api/jf/now")
     def now_playing(tv: str = Query("", max_length=100)):

@@ -169,7 +169,8 @@ are files readable by you only.
   TV channel (Jellyfin's tuner, with the guide), a favourite there: Jellyfin apps show favourite channels first in
   Live TV and its guide, apart from movies and shows. One favourited in an app as a video moves there too; one with
   no Live TV channel goes on the Jellyfin playlist "Live channels". A ♥ marks titles on My list. Home's New
-  episodes row lists new episodes of the shows on My list only (Next up still has a show you are watching). 👍 / 👎
+  episodes row lists new episodes of the shows on My list only (Next up still has a show you are watching), one
+  card a show: its first unwatched new episode, with how many are new. 👍 / 👎
   on a streaming title steer recommendations (👎 leaves it out everywhere).
 - **Into Jellyfin** (Settings): one list of the house's languages, in order, drives what goes into Jellyfin. The
   whole catalogue of a provider (hourly, a batch of shows each run), On my apps (daily: the popular titles on your
