@@ -981,6 +981,18 @@ async function open(node, title, push = true) {
       <span class="acts" data-k="${k}">${actions(v, k)}</span></div>`).join("")}</div>`;
     $("#grid").innerHTML = html || `<div class="full mute">Nothing here.</div>`;
     bindTiles(true);
+    // A provider's film (a folder of a video or two, not episodes): each one's year, length and score from TMDB,
+    // as its sheet shows them.
+    if (!jfNode && !current.episodic && videos.length && videos.length <= 3 && streaming.ready) {
+      const page = current;
+      videos.forEach((v, k) => {
+        if (v.id || v.live) return;
+        api("/api/streaming/facts?title=" + enc(v.title)).then(f => {
+          const row = $(`#grid .ep .acts[data-k="${k}"]`);
+          if (current === page && row && (f.minutes || f.score)) row.previousElementSibling.insertAdjacentHTML("beforeend", quick(f));
+        }).catch(() => {});
+      });
+    }
   } catch (e) { $("#grid").innerHTML = `<div class="full err">${esc(e.message)}</div>`; }
 }
 
