@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -38,6 +38,14 @@ OTHER_DOMAINS = {"prime": ("primevideo.com",)}  # links an app opens besides its
 POSTER = "https://image.tmdb.org/t/p/w342"
 BACKDROP = "https://image.tmdb.org/t/p/w1280"  # wide, for Home's featured title
 KEPT_FOR = 24 * 3600
+# A provider's title: its name, then a year in brackets and anything after it ("The Odyssey (2026) PreDVD")
+NAME_YEAR = re.compile(r"^(.*?)\s*\((\d{4})\).*$")
+
+
+def flat(text: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", text.lower())
+
+
 LOOKUPS = 8  # the first 8 movies and shows of a search are looked up; the rest are rarely what was meant
 FULL_MIN_VOTES = 5  # an app's whole catalogue (On my apps) leaves out titles with fewer votes
 MAX_DISCOVER_PAGES = 500  # TMDB serves no page after 500
@@ -188,6 +196,29 @@ class Streaming:
             return int(self._get(f"/movie/{tmdb_id}").get("runtime") or 0)
         except StreamingError:
             return 0
+
+    def facts(self, title: str) -> dict:
+        """A film's year, length and score from TMDB, for a provider's title Jellyfin does not have ("The Odyssey
+        (2026) PreDVD"): found by its name and year, the same name only, and with no year only when one film has
+        it. {} when TMDB has no such film."""
+        m = NAME_YEAR.match(title.strip())
+        name, year = (m.group(1), m.group(2)) if m else (title.strip(), "")
+        if not self.ready or len(name) < 2:
+            return {}
+        params = {"query": name, "include_adult": "false"} | ({"year": year} if year else {})
+        try:
+            found = self._get("/search/movie", **params).get("results", [])
+            same = [r for r in found if flat(name) in (flat(r.get("title", "")), flat(r.get("original_title", "")))]
+            if not same or (not year and len(same) > 1):
+                return {}
+            film = self._get(f"/movie/{same[0]['id']}")
+        except StreamingError:
+            return {}
+        return {
+            "year": (film.get("release_date") or "")[:4],
+            "minutes": int(film.get("runtime") or 0),
+            "score": round(film["vote_average"], 1) if film.get("vote_count", 0) >= 10 else "",
+        }
 
     def title_link(self, app: App, tmdb: str, title: str) -> str:
         """The app's own link for the title ("tv/96677" in TMDB's terms), or "" when JustWatch has none."""
@@ -436,6 +467,11 @@ def router(
             return streaming.search(q)
         except StreamingError as e:
             raise HTTPException(502, str(e)) from e
+
+    @api.get("/facts")
+    def facts(title: str = Query(max_length=200)):
+        """A provider's film's year, length and score (TMDB), for its sheet; {} when not found."""
+        return streaming.facts(title)
 
     @api.get("/suggest")
     def suggest(q: str):

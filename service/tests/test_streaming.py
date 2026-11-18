@@ -383,3 +383,33 @@ def test_on_my_apps_in_the_houses_languages_asks_tmdb_one_language_at_a_time_and
     assert [t["title"] for t in titles] == ["Hindi film", "Telugu film"]  # merged, most popular first
     assert sorted(set(asked)) == [("movie", "hi"), ("movie", "te"), ("tv", "hi"), ("tv", "te")]
     assert s.on_app_count([8], ["te", "hi"]) == 14 and s.on_app_count([8]) == 7
+
+
+def test_a_providers_film_gets_its_year_length_and_score_by_its_name(tmp_path):
+    films = {
+        "The Odyssey": [
+            {"id": 1368337, "title": "The Odyssey", "original_title": "The Odyssey"},
+            {"id": 9, "title": "The Odyssey: The Making of an Epic", "original_title": "x"},
+        ],
+        "Heat": [{"id": 949, "title": "Heat"}, {"id": 950, "title": "Heat"}],  # two films, no year to choose by
+        "Odyssey": [{"id": 1368337, "title": "The Odyssey"}],  # not the same name
+    }
+    details = {"1368337": {"release_date": "2026-07-17", "runtime": 172, "vote_average": 8.13, "vote_count": 900}}
+    asked = []
+
+    def tmdb(request: httpx.Request) -> httpx.Response:
+        asked.append((request.url.path, dict(request.url.params)))
+        if request.url.path == "/3/search/movie":
+            return httpx.Response(200, json={"results": films.get(request.url.params["query"], [])})
+        return httpx.Response(200, json=details[request.url.path.rsplit("/", 1)[1]])
+
+    s = Streaming("eyJtok", tmp_path / "m.db", transport=httpx.MockTransport(tmdb))
+    app = FastAPI()
+    app.include_router(router(s, None))
+    c = TestClient(app)
+    got = c.get("/api/streaming/facts", params={"title": "The Odyssey (2026) PreDVD"}).json()
+    assert got == {"year": "2026", "minutes": 172, "score": 8.1}
+    assert asked[0] == ("/3/search/movie", {"query": "The Odyssey", "include_adult": "false", "year": "2026"})
+    assert c.get("/api/streaming/facts", params={"title": "Heat"}).json() == {}
+    assert c.get("/api/streaming/facts", params={"title": "Odyssey (2025)"}).json() == {}
+    assert Streaming("", tmp_path / "n.db", transport=httpx.MockTransport(tmdb)).facts("Heat (1995)") == {}

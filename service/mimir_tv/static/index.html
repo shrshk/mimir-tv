@@ -843,7 +843,7 @@ function videoSheet(v) {
   const to = v.show ? "show" : v.id && v.type === "Movie" && current.node !== "jfmovie:" + v.id ? "movie" : "";
   const goes = to ? ` data-show style="cursor:pointer"` : "";  // the picture: a tap target only (the title takes the focus)
   $("#dlgbody").innerHTML = (v.thumb ? `<div class="banner"><img src="${v.thumb}" alt=""${goes}>${close}</div>` : `<div class="grab"></div><div class="row" style="justify-content:flex-end;padding:6px 8px 0">${close}</div>`)
-    + `<div class="body"><h2${to ? `${goes} role="link" tabindex="0" aria-label="Go to ${to}: ${esc(v.title)}"` : ""}>${esc(v.title)}${to ? ` <span class="mute">›</span>` : ""}</h2>${v.sub ? `<div class="mute">${esc(v.sub)}</div>` : ""}${v.desc ? `<p class="desc">${esc(v.desc)}</p>` : ""}
+    + `<div class="body"><h2${to ? `${goes} role="link" tabindex="0" aria-label="Go to ${to}: ${esc(v.title)}"` : ""}>${esc(v.title)}${to ? ` <span class="mute">›</span>` : ""}</h2>${v.sub ? `<div class="mute">${esc(v.sub)}</div>` : ""}<div class="facts"></div>${v.desc ? `<p class="desc">${esc(v.desc)}</p>` : ""}
       <div class="row acts">${actions(v, 0, "sheet")}${googleLink(v.show_title || v.title, !!(v.show_title || v.episodic))}</div></div>`;
   // An episode (Next up, Continue watching): its show's page, with the seasons and the other episodes; a movie: its
   // own page.
@@ -854,6 +854,13 @@ function videoSheet(v) {
   });
   $("#dlg").classList.add("sheet");
   $("#dlg").showModal();
+  // A provider's film Jellyfin does not have: its year, length and score from TMDB, as Jellyfin's titles show them.
+  if (!v.id && !v.live && v.type !== "TvChannel" && !v.show && streaming.ready) {
+    api("/api/streaming/facts?title=" + enc(v.title)).then(f => {
+      const el = $("#dlgbody .facts");
+      if (el && sheet.videos[0] === v && (f.minutes || f.score)) el.outerHTML = quick(f);
+    }).catch(() => {});
+  }
 }
 $("#dlg").addEventListener("close", () => { $("#dlg").classList.remove("sheet"); if (TV && lastFocus) lastFocus.focus({preventScroll: true}); });
 // TV: a sheet takes the focus while open and gives it back to the poster it came from when it closes.
