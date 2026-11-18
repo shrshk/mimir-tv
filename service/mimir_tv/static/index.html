@@ -1009,7 +1009,7 @@ async function personPage(id) {
 // Live TV, as Streamyfin and Wholphin show it (favourites first, every channel, the guide), in the provider's groups
 // (Jellyfin keeps none: the Air reads them from the tuner's playlist). Channels: logo, now with progress, next.
 // Guide: channels down, the next three hours across. A channel or a programme opens the channel's card (▶, 📺, ♥).
-let liveView = {view: "channels", group: "", fav: false, items: [], total: 0, groups: []};
+let liveView = {view: "channels", group: "", fav: false, q: "", items: [], total: 0, groups: []}, liveTimer;
 const PX = 4;  // the guide: pixels a minute
 async function livePage(more) {
   crumbs = [{title: "Live TV", node: "__live"}]; renderTrail();
@@ -1019,12 +1019,18 @@ async function livePage(more) {
   const q = new URLSearchParams({offset: v.items.length, limit: 40, hours: 3});
   if (v.group) q.set("group", v.group);
   if (v.fav) q.set("fav", "true");
+  if (v.q.trim()) q.set("q", v.q.trim());
+  const asked = v.q;
   const got = await api("/api/jf/channels?" + q).catch(e => { toast(e.message); return {channels: [], groups: [], total: 0}; });
+  if (asked !== v.q) return;  // typed on since: that search draws the page
   v.items = v.items.concat(got.channels); v.total = got.total; if (got.groups.length) v.groups = got.groups;
   pool = [];
   current = {node: "__live", title: "Live TV", items: [], videos: []};
+  const typing = document.activeElement && document.activeElement.id === "lq";
   const chip = (on, label, attr) => `<button class="chip${on ? " on" : ""}" ${attr}>${label}</button>`;
-  let html = `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
+  // A search of the channels by name and category ("star sports", "telugu news"), with a category or ♥ too.
+  let html = `<input id="lq" type="search" placeholder="Search channels (star sports, telugu news …)" autocomplete="off" enterkeyhint="search" value="${esc(v.q)}" style="margin:4px 0 10px">`
+    + `<div class="chips line">${chip(v.view === "channels", "Channels", 'data-view="channels"')}${chip(v.view === "guide", "Guide", 'data-view="guide"')}</div>`
     // The provider's categories (60 and more) in a sheet with a search, not a line of chips: the pick shows here.
     // The picked category first, with ✕ (back to all); Categories ▾ stays, to search again.
     + `<div class="chips line">${v.group ? chip(true, `${esc(v.group)} ✕`, 'data-group="" aria-label="Clear category"') : chip(!v.fav, "All", 'data-group=""')}`
@@ -1032,7 +1038,7 @@ async function livePage(more) {
   const cardOf = c => ({id: c.id, title: c.name, kind: "video", type: "TvChannel", thumb: c.thumb, sub: c.programmes[0] && c.programmes[0].on_now ? c.programmes[0].title : "Live TV"});
   const hm = t => new Date(t).toLocaleTimeString([], {hour: "numeric", minute: "2-digit"});
   const logo = c => `<div class="lg"${c.thumb ? ` style="background-image:url('${c.thumb}')"` : ""}>${c.thumb ? "" : esc(c.name)}${c.fav ? `<span class="h">♥</span>` : ""}</div>`;
-  if (!v.items.length) html += `<div class="full mute" style="margin-top:8px">${v.fav ? "No favourite channels yet: ♥ a channel to keep it first." : "No channels here."}</div>`;
+  if (!v.items.length) html += `<div class="full mute" style="margin-top:8px">${v.q.trim() ? `No channel matches “${esc(v.q.trim())}”.` : v.fav ? "No favourite channels yet: ♥ a channel to keep it first." : "No channels here."}</div>`;
   else if (v.view === "channels") {
     html += `<div class="chl">${v.items.map((c, k) => {
       const now = c.programmes.find(p => p.on_now), next = c.programmes.find(p => !p.on_now);
@@ -1059,6 +1065,9 @@ async function livePage(more) {
   $("#grid").querySelectorAll("[data-ch]").forEach(d => d.onclick = () => videoSheet(cardOf(v.items[+d.dataset.ch])));
   const moreBtn = $("#grid [data-more]"); if (moreBtn) moreBtn.onclick = () => livePage(true);
   $("#grid").querySelectorAll("[data-pick]").forEach(b => b.onclick = pickGroup);
+  const lq = $("#lq");
+  lq.oninput = () => { v.q = lq.value; clearTimeout(liveTimer); liveTimer = setTimeout(() => livePage(), 250); };
+  if (typing) { lq.focus({preventScroll: true}); lq.setSelectionRange(lq.value.length, lq.value.length); }
 }
 // Live TV's categories: a search, then each language's (or kind's) categories with their channel counts.
 function pickGroup() {

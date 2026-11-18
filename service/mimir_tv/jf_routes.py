@@ -314,9 +314,11 @@ def router(
         offset: int = Query(0, ge=0),
         limit: int = Query(40, ge=1, le=200),
         hours: int = Query(3, ge=1, le=12),
+        q: str = Query("", max_length=100),
     ):
         """Live TV as Jellyfin's apps list it (favourites first, then by number), in its tuner's groups, a page at a
-        time; each channel with its guide for the next hours (the Channels and the Guide views)."""
+        time; each channel with its guide for the next hours (the Channels and the Guide views). q: channels whose
+        name and group have every word ("star sports", "telugu news"), spaces and dots aside."""
         groups = tuner_groups()
         listed = channel_list()
         counts: dict[str, int] = {}
@@ -325,11 +327,19 @@ def router(
             if g:
                 counts[g] = counts.get(g, 0) + 1
         order = list(dict.fromkeys(groups.values()))
+        words = [re.sub(r"[^a-z0-9]", "", w) for w in q.lower().split()]
+
+        def has_words(c: dict) -> bool:
+            name = c.get("Name", "").strip()
+            text = re.sub(r"[^a-z0-9]", "", f"{name} {groups.get(name, '')}".lower())
+            return all(w in text for w in words)
+
         wanted = [
             c
             for c in listed
             if (not group or groups.get(c.get("Name", "").strip()) == group)
             and (not fav or (c.get("UserData") or {}).get("IsFavorite"))
+            and has_words(c)
         ]
         page = wanted[offset : offset + limit]
         now = time.time()

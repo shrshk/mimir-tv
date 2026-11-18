@@ -1023,6 +1023,14 @@ def test_live_tvs_channels_come_in_the_tuners_groups_favourites_first_with_their
     page = c.get("/api/jf/channels", params={"offset": 1, "limit": 1}).json()
     assert ([x["name"] for x in page["channels"]], page["total"]) == (["NDTV 24x7"], 3)
 
+    # A search by name and group: every word, spaces aside ("starsports"), with a group or the favourites too.
+    def found(**params):
+        return [x["name"] for x in c.get("/api/jf/channels", params=params).json()["channels"]]
+
+    assert found(q="star sports") == found(q="StarSports") == found(q="cricket") == ["STAR SPORTS 1"]
+    assert found(q="news") == ["NDTV 24x7", "AAJ TAK"] and found(q="hindi news") == ["AAJ TAK"]
+    assert found(q="news", fav="true") == [] and found(q="aaj", group="English · News") == []
+
 
 class PosterJellyfin:
     """Jellyfin's items and its online sources (TMDB) at the HTTP edge, for pictures."""

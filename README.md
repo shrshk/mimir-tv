@@ -146,7 +146,8 @@ are files readable by you only.
   episode from its main button, with season tabs and episodes showing progress, watched and new; a Live TV tab lists
   every channel as Streamyfin and Wholphin do (favourites first) in the provider's groups (Telugu · News, Sports ·
   Cricket …, read from the tuner's playlist, since Jellyfin keeps none), each with what is on now and next, or as a
-  guide (channels down, the next three hours across). Doodle stays as the
+  guide (channels down, the next three hours across), with a search of channels by name and group ("star sports",
+  "telugu news"). Doodle stays as the
   other theme (the pencil button).
 - **Adding what is missing**: a provider's title has two buttons. ＋ Jellyfin adds it to the library as `.strm`
   files (a show, a movie or a live channel); ＋ My list adds it and makes it a favourite. Jellyfin's search index is
