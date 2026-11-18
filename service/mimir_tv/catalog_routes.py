@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response, Streamin
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
-from mimir_tv import mirror
+from mimir_tv import length, mirror
 from mimir_tv.catalog import Catalog, CatalogError, Catalogs, Served, node_id, node_parts
 from mimir_tv.hls import PASS, HlsError, HlsRelay, from_tailnet, is_hls, is_playlist
 from mimir_tv.jellyfin import Jellyfin, JellyfinError
@@ -69,8 +69,12 @@ def router(
     hls: HlsRelay | None = None,
     play_app=None,
     tvs: Tvs | None = None,
+    probe=length.minutes,
 ) -> APIRouter:
+    """probe: a playable link's length in minutes (the file's own, read by ffprobe)."""
     hls = hls or HlsRelay()
+    lengths: dict[str, int] = {}  # a video's link -> its length, read once
+    probing = threading.Semaphore(2)
     api = APIRouter()
     thumbs.mkdir(parents=True, exist_ok=True)
     # Thumbnails: never from this Mac itself, redirects included (as the relay).
@@ -248,6 +252,23 @@ def router(
         elif away:
             return relay(hls.allow(link), request)
         return RedirectResponse(link, status_code=302)
+
+    @api.get("/api/p/{pid}/length")
+    def video_length(pid: str, u: str):
+        """An on-demand video's own length in minutes (0 when it cannot be read), read from the file once."""
+        if not u.startswith("https://"):
+            raise HTTPException(400, "not a playable link")
+        _, cat = provider(pid)
+        only_listed(cat, u)
+        if u not in lengths:
+            if not cat.on_demand(u):
+                return {"minutes": 0}  # a live stream has no length
+            with probing:  # a couple at a time: each asks the provider for a link and reads the file's header
+                found = probe(guard(cat.link, u))
+            if not found:
+                return {"minutes": 0}  # not kept: the next look tries again
+            lengths[u] = found
+        return {"minutes": lengths[u]}
 
     @api.get("/api/relay")
     def relay(u: str, request: Request):

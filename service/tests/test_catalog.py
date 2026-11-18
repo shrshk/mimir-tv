@@ -863,6 +863,25 @@ def test_into_jellyfin_previews_without_moving_anything_then_saves_the_houses_ch
     assert cfg["mirror_movies_per_category"] == 0 and c.get("/api/settings/into").json()["movies_per_category"] == 0
 
 
+def test_a_videos_length_is_read_from_its_file_once(home, cat, tmp_path):
+    # TMDB's length is the film's; a provider's copy can be another film of that name, or a cut.
+    read = []
+
+    def probe(link):  # ffprobe, at the process edge: the signed link's file is 86 minutes
+        read.append(link)
+        return 86
+
+    c = app(
+        home, tmp_path, Jellyfin("http://jf", "key", transport=httpx.MockTransport(FakeJellyfin().handler)), probe=probe
+    )
+    assert c.get("/api/p/tv1/length", params={"u": MOVIE}).json() == {"minutes": 86}
+    assert c.get("/api/p/tv1/length", params={"u": MOVIE}).json() == {"minutes": 86}
+    assert read == [f"{MOVIE}?sig=1"]  # read once, through the provider's signed link
+    assert c.get("/api/p/tv1/length", params={"u": "https://evil.example/x.mp4"}).status_code == 404  # not listed
+    channel = cat.page(SECTIONS["Live"])[0]["url"]
+    assert c.get("/api/p/tv1/length", params={"u": channel}).json() == {"minutes": 0} and len(read) == 1  # live
+
+
 def test_a_removed_copy_is_not_written_again(cat, tmp_path):
     root, air = tmp_path / "tv1-movies", "http://air:8724"
     mirror.mirror(cat, "tv1", tmp_path / "tv1", root, air)

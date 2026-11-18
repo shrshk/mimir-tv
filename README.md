@@ -184,7 +184,7 @@ are files readable by you only.
   and a word of three letters or fewer must start a word (or be initials: "ms" finds "M.S."). People come first: cast and crew with that name, each opening a page of
   their titles in Jellyfin; a title's page names its cast and director the same way, and gives a stream title's
   length from TMDB (Jellyfin learns a .strm title's length only once it is played); a provider's film not in
-  Jellyfin gets its year, length and score from TMDB by its name. With a TV guide in Jellyfin's
+  Jellyfin gets its year and score from TMDB by its name, and its length from the file itself (ffprobe). With a TV guide in Jellyfin's
   Live TV (an XMLTV source, such as a provider plugin's), "On TV" lists what is on now or later today under that name
   ("arsenal", "cricket"), each card playing its channel.
 - **Library**: libraries, folders (everything under a folder is included), excluded subfolders (an empty

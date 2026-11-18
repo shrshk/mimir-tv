@@ -838,6 +838,13 @@ async function vote(b) {
 
 // A video tile (a movie in a row or in search) opens a sheet; it has its own context, the page's stays as it is.
 let sheet = null;
+// A provider's film: its year and score from TMDB (by its name), and its length read from the file itself (a copy
+// can be another film of that name, or a cut), else TMDB's.
+function factsOf(v) {
+  const facts = streaming.ready ? api("/api/streaming/facts?title=" + enc(v.title)).catch(() => ({})) : Promise.resolve({});
+  const length = v.p && v.url ? api(P(v.p) + "/length?u=" + enc(v.url)).catch(() => ({minutes: 0})) : Promise.resolve({minutes: 0});
+  return Promise.all([facts, length]).then(([f, l]) => l.minutes ? {...f, minutes: l.minutes} : f);
+}
 function videoSheet(v) {
   sheet = {jf: !!v.id, title: v.title, videos: [v]};
   const close = `<button class="icon close" onclick="$('#dlg').close()" aria-label="Close">✕</button>`;
@@ -857,8 +864,8 @@ function videoSheet(v) {
   $("#dlg").classList.add("sheet");
   $("#dlg").showModal();
   // A provider's film Jellyfin does not have: its year, length and score from TMDB, as Jellyfin's titles show them.
-  if (!v.id && !v.live && v.type !== "TvChannel" && !v.show && streaming.ready) {
-    api("/api/streaming/facts?title=" + enc(v.title)).then(f => {
+  if (!v.id && !v.live && v.type !== "TvChannel" && !v.show) {
+    factsOf(v).then(f => {
       const el = $("#dlgbody .facts");
       if (el && sheet.videos[0] === v && (f.minutes || f.score)) el.outerHTML = quick(f);
     }).catch(() => {});
@@ -981,13 +988,13 @@ async function open(node, title, push = true) {
       <span class="acts" data-k="${k}">${actions(v, k)}</span></div>`).join("")}</div>`;
     $("#grid").innerHTML = html || `<div class="full mute">Nothing here.</div>`;
     bindTiles(true);
-    // A provider's film (a folder of a video or two, not episodes): each one's year, length and score from TMDB,
-    // as its sheet shows them.
-    if (!jfNode && !current.episodic && videos.length && videos.length <= 3 && streaming.ready) {
+    // A provider's film (a folder of a video or two, not episodes): each one's year, score and length, as its
+    // sheet shows them (factsOf).
+    if (!jfNode && !current.episodic && videos.length && videos.length <= 3) {
       const page = current;
       videos.forEach((v, k) => {
         if (v.id || v.live) return;
-        api("/api/streaming/facts?title=" + enc(v.title)).then(f => {
+        factsOf(v).then(f => {
           const row = $(`#grid .ep .acts[data-k="${k}"]`);
           if (current === page && row && (f.minutes || f.score)) row.previousElementSibling.insertAdjacentHTML("beforeend", quick(f));
         }).catch(() => {});
